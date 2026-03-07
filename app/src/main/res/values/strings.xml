@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Disone</string>
+    <string name="notification_channel_torrent">Torrent Downloads</string>
+    <string name="notification_channel_playback">Media Playback</string>
+</resources>
