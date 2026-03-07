@@ -100,6 +100,13 @@ class AddonRepository @Inject constructor(
         }
     }
 
+    suspend fun getManifest(addonBaseUrl: String): Result<AddonManifest> {
+        return addonService.fetchManifest(addonBaseUrl).fold(
+            onSuccess = { json -> addonParser.parseManifest(json) },
+            onFailure = { Result.failure(it) }
+        )
+    }
+
     suspend fun addAddonByUrl(addonUrl: String): Result<InstalledAddon> {
         val normalizedUrl = addonUrl.trim().let {
             if (!it.startsWith("http")) "https://$it" else it
@@ -160,20 +167,39 @@ class AddonRepository @Inject constructor(
         runCatching { addonApi.setAddonEnabled(auth, SetAddonEnabledRequest(url, enabled)) }
     }
 
+    /** Streaming platform catalog IDs - only fetch from addons that declare them (not Cinemeta) */
+    private val STREAMING_CATALOG_IDS = setOf("nfx", "hbm", "dnp", "amp", "atp")
+
+    /** Effective catalogs = manifest.catalogs + addonCatalogs (some addons use addonCatalogs) */
+    private fun InstalledAddon.effectiveCatalogs(): List<AddonCatalog> =
+        manifest.catalogs + (manifest.addonCatalogs.orEmpty())
+
     suspend fun getCatalogFromAddons(
         type: String = "movie",
         catalogId: String = "top",
+        extraParams: Map<String, String>? = null,
         addonsOverride: List<InstalledAddon>? = null
     ): Result<List<AddonMetaPreview>> {
         val addons = addonsOverride ?: addonStorage.installedAddons.first()
         val enabled = addons.filter { it.enabled && it.manifest.resources.contains("catalog") }
-        if (enabled.isEmpty()) return Result.success(emptyList())
+        val urlsToTry = when {
+            // Streaming catalogs FIRST: Cinemeta returns the SAME "popular" list for nfx/hbm/dnp/amp/atp (unknown IDs).
+            // Never use Cinemeta for these - always use the Streaming Catalogs addon.
+            catalogId in STREAMING_CATALOG_IDS -> {
+                val fromInstalled = enabled
+                    .filter { it.effectiveCatalogs().any { c -> c.type == type && c.id == catalogId } }
+                    .map { it.url }
+                (fromInstalled + DefaultAddons.streamingCatalogsUrl).distinct()
+            }
+            enabled.isEmpty() -> listOf(DefaultAddons.urls.first { it.contains("cinemeta") })
+            else -> enabled.map { it.url }
+        }
 
         val allMetas = mutableListOf<AddonMetaPreview>()
         val seenIds = mutableSetOf<String>()
 
-        for (addon in enabled) {
-            val result = addonService.fetchCatalog(addon.url, type, catalogId).fold(
+        for (addonUrl in urlsToTry) {
+            val result = addonService.fetchCatalog(addonUrl, type, catalogId, extraParams = extraParams).fold(
                 onSuccess = { json -> addonParser.parseCatalogResponse(json) },
                 onFailure = { Result.failure<AddonCatalogResponse>(it) }
             )
@@ -230,6 +256,42 @@ class AddonRepository @Inject constructor(
         }
 
         return Result.success(allStreams)
+    }
+
+    /**
+     * Fetches subtitles from all addons that expose the "subtitles" resource.
+     * Falls back to OpenSubtitles v3 directly when no addon has subtitles (e.g. fresh install).
+     * Merges results; first addon to return subtitles wins per language (dedup by lang).
+     */
+    suspend fun getSubtitlesFromAddons(
+        type: String,
+        videoId: String,
+        addonsOverride: List<InstalledAddon>? = null
+    ): Result<List<AddonSubtitleRaw>> {
+        val addons = addonsOverride ?: addonStorage.installedAddons.first()
+        val subtitleAddons = addons.filter { it.enabled && it.manifest.resources.contains("subtitles") }
+
+        val allSubtitles = mutableListOf<AddonSubtitleRaw>()
+        val seenUrls = mutableSetOf<String>()
+
+        val addonsToTry = if (subtitleAddons.isEmpty()) {
+            listOf(DefaultAddons.urls.find { it.contains("opensubtitles") } ?: "https://opensubtitles-v3.strem.io/")
+                .map { InstalledAddon(url = it, manifest = AddonManifest(id = "fallback", version = "1", name = "OpenSubtitles", resources = listOf("subtitles"), types = listOf("movie", "series")), enabled = true) }
+        } else subtitleAddons
+
+        for (addon in addonsToTry) {
+            if (!addon.manifest.types.contains(type)) continue
+            val result = addonService.fetchSubtitles(addon.url, type, videoId).fold(
+                onSuccess = { json -> addonParser.parseSubtitlesResponse(json) },
+                onFailure = { Result.failure<AddonSubtitlesResponse>(it) }
+            )
+            result.getOrNull()?.subtitles?.orEmpty()?.forEach { sub ->
+                if (sub.url != null && seenUrls.add(sub.url)) {
+                    allSubtitles.add(sub)
+                }
+            }
+        }
+        return Result.success(allSubtitles)
     }
 }
 

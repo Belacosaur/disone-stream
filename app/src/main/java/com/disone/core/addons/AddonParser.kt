@@ -57,6 +57,16 @@ class AddonParser @Inject constructor(
     }
 
     /**
+     * Parses Stremio subtitles response. Standard: { "subtitles": [...] }
+     */
+    fun parseSubtitlesResponse(json: String): Result<AddonSubtitlesResponse> = runCatching {
+        gson.fromJson(json, AddonSubtitlesResponse::class.java)
+            ?: AddonSubtitlesResponse(emptyList())
+    }.recoverCatching { e ->
+        throw AddonParseException("Invalid subtitles response", e as? Exception ?: Exception(e))
+    }
+
+    /**
      * Parses Stremio stream response. Supports both:
      * - Standard: { "streams": [...] }
      * - Alternative: top-level array [...]

@@ -18,6 +18,9 @@ class PendingPlayHolder @Inject constructor() {
         pending = stream
     }
 
+    /** Peek without consuming — for access check before play. */
+    fun peekPending(): DisoneStream? = pending
+
     fun takePending(): DisoneStream? {
         val s = pending
         pending = null

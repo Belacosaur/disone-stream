@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="background_dark">#0D0D14</color>
-    <color name="surface_dark">#16161F</color>
-    <color name="primary_indigo">#6366F1</color>
-    <color name="accent_teal">#14B8A6</color>
+    <color name="background_dark">#0A0A0A</color>
+    <color name="surface_dark">#141414</color>
+    <color name="primary_gold">#D4AF37</color>
+    <color name="accent_gold_light">#F5D98C</color>
 </resources>

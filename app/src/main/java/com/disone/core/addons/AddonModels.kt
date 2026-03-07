@@ -37,13 +37,17 @@ data class AddonCatalog(
     val type: String,
     val id: String,
     val name: String,
-    val extra: List<AddonCatalogExtra>? = null
+    val extra: List<AddonCatalogExtra>? = null,
+    val genres: List<String>? = null,
+    @SerializedName("extraSupported") val extraSupported: List<String>? = null,
+    @SerializedName("extraRequired") val extraRequired: List<String>? = null
 )
 
 data class AddonCatalogExtra(
     val name: String,
     @SerializedName("isRequired") val isRequired: Boolean? = false,
-    val options: List<String>? = null
+    val options: List<String>? = null,
+    @SerializedName("optionsLimit") val optionsLimit: Int? = null
 )
 
 // Stremio catalog response - array of Meta Preview
@@ -79,6 +83,8 @@ data class AddonMeta(
     val poster: String? = null,
     val description: String? = null,
     @SerializedName("releaseInfo") val releaseInfo: String? = null,
+    val year: Int? = null,
+    @SerializedName("imdbRating") val imdbRating: String? = null,
     val videos: List<AddonVideo>? = null
 )
 
@@ -89,6 +95,21 @@ data class AddonVideo(
     val season: Int? = null,
     val episode: Int? = null,
     val streams: List<AddonStreamRaw>? = null
+)
+
+// Stremio subtitles response - array of subtitle objects
+// GET {addonUrl}/subtitles/{type}/{videoId}.json
+data class AddonSubtitlesResponse(
+    val subtitles: List<AddonSubtitleRaw>? = null,
+    @SerializedName("cacheMaxAge") val cacheMaxAge: Long? = null
+)
+
+data class AddonSubtitleRaw(
+    val id: String? = null,
+    val url: String? = null,
+    val lang: String? = null,
+    val name: String? = null,
+    @SerializedName("SubEncoding") val subEncoding: String? = null
 )
 
 // Stremio stream response - array of stream objects
@@ -119,7 +140,11 @@ data class DisoneStream(
     val quality: String? = null,
     val seeders: Int? = null,
     val sizeBytes: Long? = null,
-    val sourceAddonUrl: String? = null
+    val sourceAddonUrl: String? = null,
+    /** Video type (movie/series) for subtitle addon lookup */
+    val videoType: String? = null,
+    /** Video ID (e.g. tt1234567) for subtitle addon lookup */
+    val videoId: String? = null
 )
 
 // Persisted installed addon

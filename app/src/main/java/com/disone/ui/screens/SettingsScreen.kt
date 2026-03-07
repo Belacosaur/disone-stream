@@ -1,30 +1,45 @@
 package com.disone.ui.screens
 
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.ListItem
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
-import com.disone.core.auth.AuthRepository
-import com.disone.core.auth.AuthState
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
+    onBack: () -> Unit = {},
     onAddonManagerClick: () -> Unit = {},
     viewModel: SettingsViewModel = hiltViewModel()
 ) {
-    val authState by viewModel.authState.collectAsState()
-
     Scaffold(
         topBar = {
             TopAppBar(
                 title = { Text("Settings") },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                    }
+                },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.surface,
                     titleContentColor = MaterialTheme.colorScheme.onSurface
@@ -38,26 +53,6 @@ fun SettingsScreen(
                 .padding(padding)
                 .verticalScroll(rememberScrollState())
         ) {
-            when (val auth = authState) {
-                is AuthState.Authenticated -> {
-                    ListItem(
-                        headlineContent = { Text("Wallet") },
-                        supportingContent = { Text(auth.wallet.take(12) + "..." + auth.wallet.takeLast(8)) }
-                    )
-                    ListItem(
-                        headlineContent = { Text("Plan") },
-                        supportingContent = { Text(auth.plan) }
-                    )
-                    TextButton(
-                        onClick = { viewModel.signOut() },
-                        modifier = Modifier.padding(16.dp)
-                    ) {
-                        Text("Sign Out", color = MaterialTheme.colorScheme.error)
-                    }
-                }
-                else -> {}
-            }
-            HorizontalDivider()
             ListItem(
                 headlineContent = { Text("Addon Manager") },
                 supportingContent = { Text("Manage Stremio-compatible addons") },

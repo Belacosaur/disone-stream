@@ -5,7 +5,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -20,11 +19,10 @@ fun StreamSelectorScreen(
     itemId: String,
     onPlayStream: (com.disone.core.addons.DisoneStream) -> Unit,
     onBack: () -> Unit,
-    onDiscover: () -> Unit,
+    onDiscover: () -> Unit = {},
     viewModel: StreamSelectorViewModel = hiltViewModel()
 ) {
     val state by viewModel.state.collectAsState()
-    var menuExpanded by remember { mutableStateOf(false) }
 
     LaunchedEffect(itemId) {
         viewModel.loadStreams(itemId)
@@ -37,23 +35,6 @@ fun StreamSelectorScreen(
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                    }
-                },
-                actions = {
-                    IconButton(onClick = { menuExpanded = true }) {
-                        Icon(Icons.Default.Menu, contentDescription = "Menu")
-                    }
-                    DropdownMenu(
-                        expanded = menuExpanded,
-                        onDismissRequest = { menuExpanded = false }
-                    ) {
-                        DropdownMenuItem(
-                            text = { Text("Discovery") },
-                            onClick = {
-                                menuExpanded = false
-                                onDiscover()
-                            }
-                        )
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(

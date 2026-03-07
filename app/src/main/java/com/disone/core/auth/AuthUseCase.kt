@@ -15,25 +15,26 @@ class AuthUseCase @Inject constructor(
     private val authRepository: AuthRepository
 ) {
 
+    /**
+     * Sign in with wallet using a single approval flow. Connect and sign are combined into one
+     * wallet interaction to avoid issues with wallets (e.g. Seker) that get stuck when showing
+     * connect and sign as separate screens.
+     */
     suspend fun signInWithWallet(sender: ActivityResultSender): Result<Unit> {
-        // MWA connect/transact use Activity Result API - must run on Main thread
-        val connectResult = withContext(Dispatchers.Main.immediate) {
-            walletManager.connect(sender)
-        }
-        val address = connectResult.getOrElse { return Result.failure(it) }
-        val nonceResponse = withContext(Dispatchers.IO) {
-            authApi.getNonce(address)
-        }
-        if (!nonceResponse.isSuccessful) {
-            return Result.failure(Exception("Failed to get nonce"))
-        }
-        val nonce = nonceResponse.body()?.nonce ?: return Result.failure(Exception("No nonce"))
-        val message = "Sign in to Disone: $nonce"
         val signResult = withContext(Dispatchers.Main.immediate) {
-            walletManager.signMessage(sender, message)
+            walletManager.connectAndSign(sender) { address ->
+                withContext(Dispatchers.IO) {
+                    val nonceResponse = authApi.getNonce(address)
+                    if (!nonceResponse.isSuccessful) {
+                        throw Exception("Failed to get nonce")
+                    }
+                    nonceResponse.body()?.nonce ?: throw Exception("No nonce")
+                }
+            }
         }
         return signResult.fold(
             onSuccess = { sig ->
+                val nonce = sig.message.removePrefix("Sign in to Disone: ")
                 authRepository.signIn(
                     wallet = sig.address,
                     signature = sig.signature,

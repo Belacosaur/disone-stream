@@ -3,9 +3,11 @@ package com.disone.ui.screens
 import android.app.Activity
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.disone.core.access.AccessRepository
 import com.disone.core.auth.AuthRepository
 import com.disone.core.auth.AuthState
 import com.disone.core.auth.AuthUseCase
+import com.disone.core.models.AccessCheckResponse
 import com.solana.mobilewalletadapter.clientlib.ActivityResultSender
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -15,6 +17,7 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 sealed class WalletConnectState {
+    object Initializing : WalletConnectState()
     object Idle : WalletConnectState()
     object Loading : WalletConnectState()
     data class Connected(val wallet: String, val plan: String) : WalletConnectState()
@@ -24,11 +27,15 @@ sealed class WalletConnectState {
 @HiltViewModel
 class WalletConnectViewModel @Inject constructor(
     private val authUseCase: AuthUseCase,
-    private val authRepository: AuthRepository
+    private val authRepository: AuthRepository,
+    private val accessRepository: AccessRepository
 ) : ViewModel() {
 
-    private val _state = MutableStateFlow<WalletConnectState>(WalletConnectState.Idle)
+    private val _state = MutableStateFlow<WalletConnectState>(WalletConnectState.Initializing)
     val state: StateFlow<WalletConnectState> = _state.asStateFlow()
+
+    private val _accessStatus = MutableStateFlow<AccessCheckResponse?>(null)
+    val accessStatus: StateFlow<AccessCheckResponse?> = _accessStatus.asStateFlow()
 
     init {
         viewModelScope.launch {
@@ -41,8 +48,23 @@ class WalletConnectViewModel @Inject constructor(
 
     private fun updateFromAuth(auth: AuthState) {
         when (auth) {
-            is AuthState.Authenticated -> _state.value = WalletConnectState.Connected(auth.wallet, auth.plan)
-            else -> if (_state.value !is WalletConnectState.Loading) _state.value = WalletConnectState.Idle
+            is AuthState.Authenticated -> {
+                _state.value = WalletConnectState.Connected(auth.wallet, auth.plan)
+                if (auth.plan == "P2P") {
+                    viewModelScope.launch {
+                        accessRepository.checkAccess().onSuccess { _accessStatus.value = it }
+                            .onFailure { _accessStatus.value = null }
+                    }
+                } else {
+                    _accessStatus.value = null
+                }
+            }
+            else -> {
+                _accessStatus.value = null
+                if (_state.value !is WalletConnectState.Loading) {
+                    _state.value = WalletConnectState.Idle
+                }
+            }
         }
     }
 
@@ -64,17 +86,6 @@ class WalletConnectViewModel @Inject constructor(
     fun handleActivityResult(resultCode: Int, data: android.content.Intent?) {
         if (resultCode != Activity.RESULT_OK) {
             _state.value = WalletConnectState.Error("Wallet connection cancelled")
-        }
-    }
-
-    fun useOfflineMode() {
-        viewModelScope.launch {
-            // Ensure addons (Cinemeta, Torrentio) are installed before Discovery loads
-            authRepository.initialize()
-            _state.value = WalletConnectState.Connected(
-                wallet = "offline",
-                plan = "P2P"
-            )
         }
     }
 }

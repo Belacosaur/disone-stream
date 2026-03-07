@@ -2,28 +2,32 @@ package com.disone.ui.navigation
 
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Explore
-import androidx.compose.material.icons.automirrored.filled.MenuBook
-import androidx.compose.material.icons.automirrored.outlined.MenuBook
-import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.VideoLibrary
 import androidx.compose.material.icons.outlined.Explore
-import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material.icons.outlined.Star
+import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.VideoLibrary
 import androidx.compose.runtime.Composable
+import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
 import com.disone.ui.screens.AddonManagerScreen
-import com.disone.ui.screens.CatalogueScreen
 import com.disone.ui.screens.DiscoveryScreen
+import com.disone.ui.screens.FeaturedScreen
 import com.disone.ui.screens.LibraryScreen
 import com.disone.ui.screens.MainScreen
 import com.disone.ui.screens.PlayerScreen
+import com.disone.ui.screens.AccountScreen
 import com.disone.ui.screens.SettingsScreen
 import com.disone.ui.screens.StreamSelectorScreen
+import com.disone.ui.screens.TitleDetailScreen
 import com.disone.ui.screens.WalletConnectScreen
+import com.disone.core.utils.parseItemId
 import java.net.URLDecoder
 import java.net.URLEncoder
 
@@ -34,18 +38,23 @@ enum class BottomNav(
     val selectedIcon: androidx.compose.ui.graphics.vector.ImageVector,
     val unselectedIcon: androidx.compose.ui.graphics.vector.ImageVector
 ) {
+    Featured("featured", "Featured", Icons.Filled.Star, Icons.Outlined.Star),
     Discovery("discovery", "Discovery", Icons.Filled.Explore, Icons.Outlined.Explore),
-    Catalogue("catalogue", "Catalogue", Icons.AutoMirrored.Filled.MenuBook, Icons.AutoMirrored.Outlined.MenuBook),
     Library("library", "Library", Icons.Filled.VideoLibrary, Icons.Outlined.VideoLibrary),
-    Settings("settings", "Settings", Icons.Filled.Settings, Icons.Outlined.Settings)
+    Account("account", "Account", Icons.Filled.Person, Icons.Outlined.Person)
 }
 
 sealed class Screen(val route: String) {
     object WalletConnect : Screen("wallet_connect")
+    object Featured : Screen("featured")
     object Discovery : Screen("discovery")
-    object Catalogue : Screen("catalogue")
     object Library : Screen("library")
+    object Account : Screen("account")
     object Settings : Screen("settings")
+    object TitleDetail : Screen("title_detail/{type}/{id}") {
+        fun createRoute(type: String, id: String) =
+            "title_detail/${URLEncoder.encode(type, "UTF-8")}/${URLEncoder.encode(id, "UTF-8")}"
+    }
     object StreamSelector : Screen("stream_selector/{itemId}") {
         fun createRoute(itemId: String) = "stream_selector/${URLEncoder.encode(itemId, "UTF-8")}"
     }
@@ -70,29 +79,71 @@ fun NavGraph(
             composable(Screen.WalletConnect.route) {
                 WalletConnectScreen(
                     onConnected = {
-                        navController.navigate(Screen.Discovery.route) {
+                        navController.navigate(Screen.Featured.route) {
                             popUpTo(Screen.WalletConnect.route) { inclusive = true }
                         }
                     }
                 )
             }
 
-            composable(Screen.Discovery.route) {
-                DiscoveryScreen(
-                    onItemClick = { item -> navController.navigate(Screen.StreamSelector.createRoute(item.id)) }
+            composable(Screen.Featured.route) {
+                FeaturedScreen(
+                    onItemClick = { type, id ->
+                        navController.navigate(Screen.TitleDetail.createRoute(type, id))
+                    }
                 )
             }
 
-            composable(Screen.Catalogue.route) {
-                CatalogueScreen()
+            composable(Screen.Discovery.route) {
+                DiscoveryScreen(
+                    onItemClick = { item ->
+                        val (type, id) = parseItemId(item.id)
+                        navController.navigate(Screen.TitleDetail.createRoute(type, id))
+                    }
+                )
             }
 
             composable(Screen.Library.route) {
-                LibraryScreen()
+                LibraryScreen(
+                    onItemClick = { type, id ->
+                        navController.navigate(Screen.TitleDetail.createRoute(type, id))
+                    }
+                )
+            }
+
+            composable(Screen.Account.route) {
+                AccountScreen(
+                    onSettingsClick = { navController.navigate(Screen.Settings.route) },
+                    onSignOut = {
+                        navController.navigate(Screen.WalletConnect.route) {
+                            popUpTo(navController.graph.findStartDestination().id) { inclusive = true }
+                            launchSingleTop = true
+                        }
+                    }
+                )
+            }
+
+            composable(
+                Screen.TitleDetail.route,
+                arguments = listOf(
+                    navArgument("type") { type = NavType.StringType },
+                    navArgument("id") { type = NavType.StringType }
+                )
+            ) { backStackEntry ->
+                val type = backStackEntry.arguments?.getString("type") ?: "movie"
+                val id = backStackEntry.arguments?.getString("id") ?: ""
+                val itemId = com.disone.core.utils.toItemId(type, id)
+                TitleDetailScreen(
+                    type = type,
+                    id = id,
+                    onWatch = { navController.navigate(Screen.StreamSelector.createRoute(itemId)) },
+                    onBack = { navController.popBackStack() }
+                )
             }
 
             composable(Screen.Settings.route) {
                 SettingsScreen(
+                    onBack = { navController.popBackStack() },
                     onAddonManagerClick = { navController.navigate(Screen.AddonManager.route) }
                 )
             }

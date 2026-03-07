@@ -4,7 +4,14 @@ import com.google.gson.Gson
 import com.google.gson.GsonBuilder
 import com.disone.core.api.AddonApi
 import com.disone.core.api.AuthApi
+import com.disone.core.api.CommentsApi
+import com.disone.core.api.ProfileApi
+import com.disone.core.api.RatingsApi
+import com.disone.core.api.ReviewsApi
+import com.disone.core.api.LibraryApi
 import com.disone.core.api.StreamApi
+import com.disone.core.api.SubscriptionApi
+import com.disone.core.api.AccessApi
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -85,6 +92,34 @@ object AppModule {
         .addConverterFactory(GsonConverterFactory.create())
         .build()
         .create(AddonApi::class.java)
+
+    @Provides
+    @Singleton
+    fun provideProfileApi(retrofit: Retrofit): ProfileApi = retrofit.create(ProfileApi::class.java)
+
+    @Provides
+    @Singleton
+    fun provideRatingsApi(retrofit: Retrofit): RatingsApi = retrofit.create(RatingsApi::class.java)
+
+    @Provides
+    @Singleton
+    fun provideReviewsApi(retrofit: Retrofit): ReviewsApi = retrofit.create(ReviewsApi::class.java)
+
+    @Provides
+    @Singleton
+    fun provideCommentsApi(retrofit: Retrofit): CommentsApi = retrofit.create(CommentsApi::class.java)
+
+    @Provides
+    @Singleton
+    fun provideSubscriptionApi(retrofit: Retrofit): SubscriptionApi = retrofit.create(SubscriptionApi::class.java)
+
+    @Provides
+    @Singleton
+    fun provideAccessApi(retrofit: Retrofit): AccessApi = retrofit.create(AccessApi::class.java)
+
+    @Provides
+    @Singleton
+    fun provideLibraryApi(retrofit: Retrofit): LibraryApi = retrofit.create(LibraryApi::class.java)
 
     @Provides
     @Singleton

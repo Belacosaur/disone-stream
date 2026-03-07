@@ -8,7 +8,9 @@ import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
-import java.net.URL
+import java.io.File
+import java.net.URLEncoder
+import java.nio.charset.StandardCharsets
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -39,11 +41,20 @@ class AddonService @Inject constructor(
         addonBaseUrl: String,
         type: String,
         id: String,
-        extra: String? = null
+        extra: String? = null,
+        extraParams: Map<String, String>? = null
     ): Result<String> = withContext(Dispatchers.IO) {
         requestSemaphore.withPermit {
-            val path = if (extra != null) {
-                "catalog/$type/$id/$extra.json"
+            val encodedExtra = when {
+                extraParams != null && extraParams.isNotEmpty() -> {
+                    val query = extraParams.entries.joinToString("&") { (k, v) -> "$k=$v" }
+                    URLEncoder.encode(query, StandardCharsets.UTF_8.name())
+                }
+                extra != null -> extra
+                else -> null
+            }
+            val path = if (encodedExtra != null) {
+                "catalog/$type/$id/$encodedExtra.json"
             } else {
                 "catalog/$type/$id.json"
             }
@@ -61,15 +72,68 @@ class AddonService @Inject constructor(
     suspend fun fetchStreams(addonBaseUrl: String, type: String, videoId: String): Result<String> =
         withContext(Dispatchers.IO) {
             requestSemaphore.withPermit {
-                // Stremio protocol: /stream/{type}/{videoID}.json - use raw id when safe, else encode
-                val pathId = if (videoId.all { it.isLetterOrDigit() || it == '-' || it == '_' }) {
-                    videoId
-                } else {
-                    java.net.URLEncoder.encode(videoId, "UTF-8")
-                }
+                val pathId = encodePathId(videoId)
                 fetchJson(normalizeAddonUrl(addonBaseUrl) + "stream/$type/$pathId.json")
             }
         }
+
+    suspend fun fetchSubtitles(addonBaseUrl: String, type: String, videoId: String): Result<String> =
+        withContext(Dispatchers.IO) {
+            requestSemaphore.withPermit {
+                val pathId = encodePathId(videoId)
+                fetchJson(normalizeAddonUrl(addonBaseUrl) + "subtitles/$type/$pathId.json")
+            }
+        }
+
+    /**
+     * Downloads a subtitle file to a temp file. Use this instead of passing remote URLs to libVLC,
+     * as subs5.strem.io may block libVLC's default User-Agent. Uses Stremio-like User-Agent.
+     */
+    suspend fun downloadSubtitleToFile(url: String): Result<File> = withContext(Dispatchers.IO) {
+        requestSemaphore.withPermit {
+            try {
+                val request = Request.Builder()
+                    .url(url)
+                    .header("User-Agent", "Stremio/4.0 (Disone)")
+                    .get()
+                    .build()
+                val response = addonClient.newCall(request).execute()
+                when {
+                    !response.isSuccessful -> Result.failure(
+                        AddonNetworkException("HTTP ${response.code}: ${response.message}", response.code)
+                    )
+                    response.body == null -> Result.failure(
+                        AddonNetworkException("Empty response", response.code)
+                    )
+                    else -> {
+                        val ext = when {
+                            url.contains(".vtt") -> ".vtt"
+                            url.contains(".ass") -> ".ass"
+                            url.contains(".ssa") -> ".ssa"
+                            else -> ".srt"
+                        }
+                        val file = File.createTempFile("sub_", ext)
+                        file.deleteOnExit()
+                        response.body!!.byteStream().use { input ->
+                            file.outputStream().use { output ->
+                                input.copyTo(output)
+                            }
+                        }
+                        Result.success(file)
+                    }
+                }
+            } catch (e: Exception) {
+                Result.failure(
+                    if (e is AddonNetworkException) e
+                    else AddonNetworkException("Download failed: ${e.message}", -1, e)
+                )
+            }
+        }
+    }
+
+    private fun encodePathId(videoId: String): String =
+        if (videoId.all { it.isLetterOrDigit() || it == '-' || it == '_' }) videoId
+        else java.net.URLEncoder.encode(videoId, "UTF-8")
 
     private fun normalizeAddonUrl(url: String): String {
         val trimmed = url.trim().removeSuffix("/")

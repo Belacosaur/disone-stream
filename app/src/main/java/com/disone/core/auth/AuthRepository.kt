@@ -74,6 +74,15 @@ class AuthRepository @Inject constructor(
         _authState.value = AuthState.Unauthenticated
     }
 
+    /** Update auth state after subscription purchase (new token + PREMIUM plan).
+     * Uses synchronous storage writes so the new token is visible before authState is emitted. */
+    fun updateFromPurchase(token: String, expiresIn: Int, plan: String) {
+        val wallet = tokenStorage.getWallet() ?: return
+        tokenStorage.saveToken(token, expiresIn.toLong())
+        tokenStorage.savePlan(plan)
+        _authState.value = AuthState.Authenticated(wallet = wallet, plan = plan, token = token)
+    }
+
     fun getAuthHeader(): String? {
         val token = tokenStorage.getToken()
         return if (token != null) "Bearer $token" else null

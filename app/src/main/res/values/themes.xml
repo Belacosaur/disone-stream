@@ -1,10 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <style name="Theme.Disone" parent="android:Theme.Material.Light.NoActionBar">
-        <item name="android:statusBarColor">@color/background_dark</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
         <item name="android:navigationBarColor">@color/background_dark</item>
         <item name="android:windowBackground">@color/background_dark</item>
-        <item name="android:colorPrimary">@color/primary_indigo</item>
-        <item name="android:colorAccent">@color/accent_teal</item>
+        <item name="android:colorPrimary">@color/primary_gold</item>
+        <item name="android:colorAccent">@color/accent_gold_light</item>
     </style>
 </resources>

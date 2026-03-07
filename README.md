@@ -83,7 +83,6 @@ For wallet-based auth, deploy a service with:
 - `GET /auth/nonce?wallet=<pubkey>` → `{ "nonce": "..." }`
 - `POST /auth/verify` with `{ "wallet", "signature", "nonce" }` → `{ "token", "expiresIn", "plan" }`
 
-If no auth backend is available, use **"Continue without wallet (dev)"** on the wallet connect screen to run in offline/dev mode.
 
 ### 3. Wallet Adapter
 

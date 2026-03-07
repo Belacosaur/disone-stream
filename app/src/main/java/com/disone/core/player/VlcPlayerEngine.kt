@@ -20,8 +20,11 @@ class VlcPlayerEngine @Inject constructor(
     private var libVlc: LibVLC? = null
     private var mediaPlayer: MediaPlayer? = null
     private var pendingVideoLayout: VLCVideoLayout? = null
+    private var lastAttachedLayout: VLCVideoLayout? = null
     private var onPlaybackError: ((String) -> Unit)? = null
+    private var onMediaReady: (() -> Unit)? = null
     private val mainHandler = Handler(Looper.getMainLooper())
+    private var savedVolumeBeforeMute = 80
 
     private fun ensureLibVlc(): LibVLC {
         if (libVlc == null) {
@@ -39,7 +42,8 @@ class VlcPlayerEngine @Inject constructor(
 
     private fun attachLayoutIfNeeded() {
         pendingVideoLayout?.let { layout ->
-            mediaPlayer?.attachViews(layout, null, true, false)
+            mediaPlayer?.attachViews(layout, null, true, true)
+            lastAttachedLayout = layout
             pendingVideoLayout = null
         }
     }
@@ -48,15 +52,25 @@ class VlcPlayerEngine @Inject constructor(
         onPlaybackError = callback
     }
 
+    fun setOnMediaReady(callback: (() -> Unit)?) {
+        onMediaReady = callback
+    }
+
     private fun createPlayerWithErrorListener(vlc: LibVLC): MediaPlayer {
         return MediaPlayer(vlc).apply {
             setEventListener(object : MediaPlayer.EventListener {
                 override fun onEvent(event: MediaPlayer.Event) {
-                    if (event.type == MediaPlayer.Event.EncounteredError) {
-                        val cb = onPlaybackError
-                        if (cb != null) {
-                            mainHandler.post { cb("Stream unavailable or playback failed") }
+                    when (event.type) {
+                        MediaPlayer.Event.EncounteredError -> {
+                            val cb = onPlaybackError
+                            if (cb != null) {
+                                mainHandler.post { cb("Stream unavailable or playback failed") }
+                            }
                         }
+                        MediaPlayer.Event.Playing -> {
+                            onMediaReady?.let { mainHandler.post(it) }
+                        }
+                        else -> {}
                     }
                 }
             })
@@ -91,6 +105,7 @@ class VlcPlayerEngine @Inject constructor(
 
     override fun stop() {
         onPlaybackError = null
+        lastAttachedLayout = null
         mediaPlayer?.apply {
             stop()
             release()
@@ -129,16 +144,77 @@ class VlcPlayerEngine @Inject constructor(
     }
 
     fun setVideoLayout(layout: VLCVideoLayout) {
-        pendingVideoLayout = layout
-        mediaPlayer?.let {
-            // Detach before re-attach to avoid "Can't set view when already attached" (Compose recomposition)
-            it.detachViews()
-            it.attachViews(layout, null, true, false)
-            pendingVideoLayout = null
+        mediaPlayer?.let { mp ->
+            if (layout == lastAttachedLayout) return
+            lastAttachedLayout = layout
+            mp.detachViews()
+            mp.attachViews(layout, null, true, true)
+        } ?: run {
+            pendingVideoLayout = layout
         }
     }
 
     fun detachViews() {
         mediaPlayer?.detachViews()
     }
+
+    // --- Stremio-style controls ---
+
+    override fun setRate(rate: Float) {
+        mediaPlayer?.setRate(rate.coerceIn(0.25f, 4f))
+    }
+
+    override fun getRate(): Float = mediaPlayer?.getRate() ?: 1f
+
+    override fun setVolume(volume: Int) {
+        mediaPlayer?.setVolume(volume.coerceIn(0, 100))
+        if (volume > 0) savedVolumeBeforeMute = volume
+    }
+
+    override fun getVolume(): Int = mediaPlayer?.getVolume() ?: 100
+
+    override fun setMuted(muted: Boolean) {
+        mediaPlayer?.let { mp ->
+            if (muted) {
+                savedVolumeBeforeMute = mp.getVolume().takeIf { it > 0 } ?: savedVolumeBeforeMute
+                mp.setVolume(0)
+            } else {
+                mp.setVolume(savedVolumeBeforeMute)
+            }
+        }
+    }
+
+    override fun isMuted(): Boolean = (mediaPlayer?.getVolume() ?: 100) == 0
+
+    override fun getSubtitleTracks(): List<SubtitleTrack> {
+        val mp = mediaPlayer ?: return emptyList()
+        val tracks = mp.getSpuTracks() ?: return emptyList()
+        return tracks.map { SubtitleTrack(id = it.id.toString(), name = it.name ?: "Track ${it.id}", isEmbedded = true) }
+    }
+
+    override fun setSubtitleTrack(trackId: Int) {
+        mediaPlayer?.setSpuTrack(trackId)
+    }
+
+    override fun getSubtitleTrack(): Int = mediaPlayer?.getSpuTrack() ?: -1
+
+    override fun addExternalSubtitle(url: String): Int = -1
+
+    override fun getAudioTracks(): List<AudioTrack> {
+        val mp = mediaPlayer ?: return emptyList()
+        val tracks = mp.getAudioTracks() ?: return emptyList()
+        return tracks.map { AudioTrack(id = it.id.toString(), name = it.name ?: "Track ${it.id}") }
+    }
+
+    override fun setAudioTrack(trackId: Int) {
+        mediaPlayer?.setAudioTrack(trackId)
+    }
+
+    override fun getAudioTrack(): Int = mediaPlayer?.getAudioTrack() ?: -1
+
+    override fun setSubtitleDelay(delayMs: Long) {
+        mediaPlayer?.setSpuDelay(delayMs)
+    }
+
+    override fun getSubtitleDelay(): Long = mediaPlayer?.getSpuDelay() ?: 0L
 }

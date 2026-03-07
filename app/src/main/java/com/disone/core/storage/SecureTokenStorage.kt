@@ -30,11 +30,12 @@ class SecureTokenStorage @Inject constructor(
         }
     }
 
+    /** Saves token synchronously so subsequent getToken() sees it immediately. Critical for auth after purchase. */
     fun saveToken(token: String, expiresInSeconds: Long) {
         sharedPreferences.edit().apply {
             putString(KEY_TOKEN, token)
             putLong(KEY_TOKEN_EXPIRY, System.currentTimeMillis() + (expiresInSeconds * 1000))
-            apply()
+            commit()
         }
     }
 
@@ -45,13 +46,13 @@ class SecureTokenStorage @Inject constructor(
     }
 
     fun savePlan(plan: String) {
-        sharedPreferences.edit().putString(KEY_PLAN, plan).apply()
+        sharedPreferences.edit().putString(KEY_PLAN, plan).commit()
     }
 
     fun getPlan(): String? = sharedPreferences.getString(KEY_PLAN, null)
 
     fun saveWallet(wallet: String) {
-        sharedPreferences.edit().putString(KEY_WALLET, wallet).apply()
+        sharedPreferences.edit().putString(KEY_WALLET, wallet).commit()
     }
 
     fun getWallet(): String? = sharedPreferences.getString(KEY_WALLET, null)

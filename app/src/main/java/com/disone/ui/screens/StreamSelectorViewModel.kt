@@ -98,7 +98,8 @@ class StreamSelectorViewModel @Inject constructor(
                     delay(200)
                     disoneStreams = fetchStreamsFromTorrentio(type, videoId)
                 }
-                _state.value = _state.value.copy(streams = mapToUi(disoneStreams), isLoading = false)
+                val withContext = disoneStreams.map { it.copy(videoType = type, videoId = videoId) }
+                _state.value = _state.value.copy(streams = mapToUi(withContext), isLoading = false)
             } else {
                 val typesToTry = if (itemId.startsWith("tt") || itemId.startsWith("kitsu")) {
                     listOf("movie", "series", "anime")
@@ -106,12 +107,17 @@ class StreamSelectorViewModel @Inject constructor(
                     emptyList()
                 }
                 var addonStreams: List<DisoneStream>? = null
+                var resolvedType: String? = null
                 for (t in typesToTry) {
                     addonStreams = fetchStreamsFromTorrentio(t, itemId)
-                    if (addonStreams.isNotEmpty()) break
+                    if (addonStreams.isNotEmpty()) {
+                        resolvedType = t
+                        break
+                    }
                 }
-                if (addonStreams != null && addonStreams.isNotEmpty()) {
-                    _state.value = _state.value.copy(streams = mapToUi(addonStreams), isLoading = false)
+                if (addonStreams != null && addonStreams.isNotEmpty() && resolvedType != null) {
+                    val withContext = addonStreams.map { it.copy(videoType = resolvedType, videoId = itemId) }
+                    _state.value = _state.value.copy(streams = mapToUi(withContext), isLoading = false)
                 } else {
                     streamingRepository.getCatalog(page = 1).fold(
                         onSuccess = { page ->
@@ -127,7 +133,9 @@ class StreamSelectorViewModel @Inject constructor(
                                     disoneStream = DisoneStream(
                                         title = opt.resolution ?: "Stream",
                                         magnet = opt.magnet,
-                                        fileIdx = 0
+                                        fileIdx = 0,
+                                        videoType = "movie",
+                                        videoId = itemId
                                     )
                                 )
                             } ?: emptyList()

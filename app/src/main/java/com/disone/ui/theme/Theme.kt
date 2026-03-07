@@ -4,19 +4,21 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.ui.graphics.Color
+import com.google.accompanist.systemuicontroller.rememberSystemUiController
 
-private val DeepIndigo = Color(0xFF6366F1)
-private val NeonTeal = Color(0xFF14B8A6)
-private val BackgroundDark = Color(0xFF0D0D14)
-private val SurfaceDark = Color(0xFF16161F)
+private val Gold = Color(0xFFD4AF37)
+private val GoldLight = Color(0xFFF5D98C)
+private val BackgroundBlack = Color(0xFF0A0A0A)
+private val SurfaceDark = Color(0xFF141414)
 
 private val DarkColorScheme = darkColorScheme(
-    primary = DeepIndigo,
-    secondary = NeonTeal,
-    background = BackgroundDark,
+    primary = Gold,
+    secondary = GoldLight,
+    background = BackgroundBlack,
     surface = SurfaceDark,
-    onPrimary = Color.White,
+    onPrimary = Color.Black,
     onSecondary = Color.Black,
     onBackground = Color.White,
     onSurface = Color.White
@@ -29,6 +31,16 @@ fun DisoneTheme(
 ) {
     MaterialTheme(
         colorScheme = DarkColorScheme,
-        content = content
+        content = {
+            val systemUiController = rememberSystemUiController()
+            DisposableEffect(systemUiController) {
+                systemUiController.setStatusBarColor(
+                    color = Color.Transparent,
+                    darkIcons = false
+                )
+                onDispose { }
+            }
+            content()
+        }
     )
 }

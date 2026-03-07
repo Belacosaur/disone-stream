@@ -63,6 +63,42 @@ class ExoPlayerEngine @Inject constructor(
         exoPlayer?.seekTo(timeMs)
     }
 
+    override fun setRate(rate: Float) {
+        exoPlayer?.setPlaybackSpeed(rate.coerceIn(0.25f, 4f))
+    }
+
+    override fun getRate(): Float = exoPlayer?.playbackParameters?.speed ?: 1f
+
+    override fun setVolume(volume: Int) {
+        exoPlayer?.volume = (volume / 100f).coerceIn(0f, 1f)
+    }
+
+    override fun getVolume(): Int = ((exoPlayer?.volume ?: 1f) * 100).toInt()
+
+    override fun setMuted(muted: Boolean) {
+        exoPlayer?.volume = if (muted) 0f else 1f
+    }
+
+    override fun isMuted(): Boolean = (exoPlayer?.volume ?: 1f) == 0f
+
+    override fun getSubtitleTracks(): List<SubtitleTrack> = emptyList()
+
+    override fun setSubtitleTrack(trackId: Int) {}
+
+    override fun getSubtitleTrack(): Int = -1
+
+    override fun addExternalSubtitle(url: String): Int = -1
+
+    override fun getAudioTracks(): List<AudioTrack> = emptyList()
+
+    override fun setAudioTrack(trackId: Int) {}
+
+    override fun getAudioTrack(): Int = -1
+
+    override fun setSubtitleDelay(delayMs: Long) {}
+
+    override fun getSubtitleDelay(): Long = 0L
+
     fun bindToView(playerView: PlayerView) {
         exoPlayer?.let { playerView.player = it }
     }

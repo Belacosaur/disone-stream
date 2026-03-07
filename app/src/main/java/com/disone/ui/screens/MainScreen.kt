@@ -1,16 +1,8 @@
 package com.disone.ui.screens
 
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Explore
-import androidx.compose.material.icons.automirrored.filled.MenuBook
-import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.VideoLibrary
-import androidx.compose.material.icons.outlined.Explore
-import androidx.compose.material.icons.automirrored.outlined.MenuBook
-import androidx.compose.material.icons.outlined.Settings
-import androidx.compose.material.icons.outlined.VideoLibrary
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
@@ -30,14 +22,15 @@ fun MainScreen(
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentDestination = navBackStackEntry?.destination
     val showBottomBar = currentDestination?.route in listOf(
+        BottomNav.Featured.route,
         BottomNav.Discovery.route,
-        BottomNav.Catalogue.route,
         BottomNav.Library.route,
-        BottomNav.Settings.route
+        BottomNav.Account.route
     )
 
     Scaffold(
         modifier = modifier,
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         bottomBar = {
             if (showBottomBar) {
                 NavigationBar {
