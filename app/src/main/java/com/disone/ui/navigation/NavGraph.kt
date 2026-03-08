@@ -10,7 +10,13 @@ import androidx.compose.material.icons.outlined.Star
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.VideoLibrary
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.navigation.NavGraph.Companion.findStartDestination
+import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -24,6 +30,7 @@ import com.disone.ui.screens.MainScreen
 import com.disone.ui.screens.PlayerScreen
 import com.disone.ui.screens.AccountScreen
 import com.disone.ui.screens.SettingsScreen
+import com.disone.ui.screens.EpisodesScreen
 import com.disone.ui.screens.StreamSelectorScreen
 import com.disone.ui.screens.TitleDetailScreen
 import com.disone.ui.screens.WalletConnectScreen
@@ -58,20 +65,50 @@ sealed class Screen(val route: String) {
     object StreamSelector : Screen("stream_selector/{itemId}") {
         fun createRoute(itemId: String) = "stream_selector/${URLEncoder.encode(itemId, "UTF-8")}"
     }
+    object Episodes : Screen("episodes/{itemId}") {
+        fun createRoute(itemId: String) = "episodes/${URLEncoder.encode(itemId, "UTF-8")}"
+    }
     object Player : Screen("player/{magnetEncoded}/{fileIndex}") {
         fun createRoute(magnet: String, fileIndex: Int) =
             "player/${URLEncoder.encode(magnet, "UTF-8")}/$fileIndex"
     }
     object PlayerStream : Screen("player_stream")
     object AddonManager : Screen("addon_manager")
+    object Search : Screen("search")
 }
 
 @Composable
 fun NavGraph(
     navController: NavHostController,
-    pendingPlayHolder: com.disone.core.playback.PendingPlayHolder
+    pendingPlayHolder: com.disone.core.playback.PendingPlayHolder,
+    initialDeepLinkRoute: String? = null,
+    onDeepLinkConsumed: () -> Unit = {}
 ) {
-    MainScreen(navController = navController) {
+    var hideHeaderByFullscreen by remember { mutableStateOf(false) }
+    val backStackEntry by navController.currentBackStackEntryAsState()
+    val currentRoute = backStackEntry?.destination?.route
+
+    LaunchedEffect(initialDeepLinkRoute) {
+        if (initialDeepLinkRoute != null) {
+            navController.navigate(initialDeepLinkRoute) {
+                popUpTo(navController.graph.findStartDestination().id) { inclusive = false }
+                launchSingleTop = true
+            }
+            onDeepLinkConsumed()
+        }
+    }
+
+    LaunchedEffect(currentRoute) {
+        if (currentRoute != Screen.PlayerStream.route && !currentRoute.orEmpty().startsWith("player/")) {
+            hideHeaderByFullscreen = false
+        }
+    }
+
+    MainScreen(
+        navController = navController,
+        hideHeaderByFullscreen = hideHeaderByFullscreen,
+        onSearchClick = { navController.navigate(Screen.Search.route) }
+    ) {
         NavHost(
             navController = navController,
             startDestination = Screen.WalletConnect.route
@@ -136,7 +173,13 @@ fun NavGraph(
                 TitleDetailScreen(
                     type = type,
                     id = id,
-                    onWatch = { navController.navigate(Screen.StreamSelector.createRoute(itemId)) },
+                    onWatch = {
+                        if (type == "series") {
+                            navController.navigate(Screen.Episodes.createRoute(itemId))
+                        } else {
+                            navController.navigate(Screen.StreamSelector.createRoute(itemId))
+                        }
+                    },
                     onBack = { navController.popBackStack() }
                 )
             }
@@ -165,8 +208,8 @@ fun NavGraph(
                 }
                 StreamSelectorScreen(
                     itemId = itemId,
-                    onPlayStream = { stream ->
-                        pendingPlayHolder.setPending(stream)
+                    onPlayStream = { stream, resumeFromMs ->
+                        pendingPlayHolder.setPending(stream, resumeFromMs)
                         navController.navigate(Screen.PlayerStream.route)
                     },
                     onBack = { navController.popBackStack() },
@@ -175,6 +218,31 @@ fun NavGraph(
                             popUpTo(Screen.Discovery.route) { inclusive = true }
                         }
                     }
+                )
+            }
+
+            composable(
+                Screen.Episodes.route,
+                arguments = listOf(
+                    navArgument("itemId") {
+                        type = NavType.StringType
+                        defaultValue = ""
+                    }
+                )
+            ) { backStackEntry ->
+                val itemIdRaw = backStackEntry.arguments?.getString("itemId") ?: ""
+                val itemId = try {
+                    URLDecoder.decode(itemIdRaw, "UTF-8")
+                } catch (_: Exception) {
+                    itemIdRaw
+                }
+                EpisodesScreen(
+                    itemId = itemId,
+                    onPlayStream = { stream, resumeFromMs ->
+                        pendingPlayHolder.setPending(stream, resumeFromMs)
+                        navController.navigate(Screen.PlayerStream.route)
+                    },
+                    onBack = { navController.popBackStack() }
                 )
             }
 
@@ -188,7 +256,8 @@ fun NavGraph(
                         navController.navigate(Screen.Discovery.route) {
                             popUpTo(Screen.Discovery.route) { inclusive = true }
                         }
-                    }
+                    },
+                    onFullscreenChange = { hideHeaderByFullscreen = it }
                 )
             }
 
@@ -211,12 +280,22 @@ fun NavGraph(
                         navController.navigate(Screen.Discovery.route) {
                             popUpTo(Screen.Discovery.route) { inclusive = true }
                         }
-                    }
+                    },
+                    onFullscreenChange = { hideHeaderByFullscreen = it }
                 )
             }
 
             composable(Screen.AddonManager.route) {
                 AddonManagerScreen(onBack = { navController.popBackStack() })
+            }
+
+            composable(Screen.Search.route) {
+                com.disone.ui.screens.SearchScreen(
+                    onItemClick = { type, id ->
+                        navController.navigate(Screen.TitleDetail.createRoute(type, id))
+                    },
+                    onBack = { navController.popBackStack() }
+                )
             }
         }
     }

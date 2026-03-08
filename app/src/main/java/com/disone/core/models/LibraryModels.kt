@@ -28,7 +28,8 @@ data class LibraryItemState(
     @SerializedName("timeOffset") val timeOffset: Long?,
     val duration: Long?,
     val watched: String?,
-    @SerializedName("flaggedWatched") val flaggedWatched: Int?
+    @SerializedName("flaggedWatched") val flaggedWatched: Int?,
+    @SerializedName("videoId") val videoId: String? = null
 )
 
 data class LibraryDeepLinks(
@@ -37,8 +38,14 @@ data class LibraryDeepLinks(
 )
 
 data class LibraryContainsResponse(
-    @SerializedName("inLibrary") val inLibrary: Boolean
+    @SerializedName("inLibrary") val inLibrary: Boolean,
+    @SerializedName("timeOffset") val timeOffset: Long? = null,
+    val duration: Long? = null,
+    @SerializedName("isWatched") val isWatched: Boolean? = null,
+    @SerializedName("videoId") val videoId: String? = null
 )
+
+data class LibraryProgress(val timeOffsetMs: Long, val durationMs: Long, val videoId: String? = null)
 
 data class LibraryAddRequest(
     @SerializedName("library_item_id") val libraryItemId: String,

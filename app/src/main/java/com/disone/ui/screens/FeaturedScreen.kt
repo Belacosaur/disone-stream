@@ -19,14 +19,13 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.FilterChip
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -51,44 +50,7 @@ fun FeaturedScreen(
     }
 
     Scaffold(
-        topBar = {
-            TopAppBar(
-                title = {
-                    Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            Image(
-                                painter = painterResource(R.drawable.logo),
-                                contentDescription = null,
-                                modifier = Modifier.height(28.dp)
-                            )
-                            Text("Featured", style = MaterialTheme.typography.titleLarge)
-                        }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface,
-                    titleContentColor = MaterialTheme.colorScheme.onSurface
-                ),
-                actions = {
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        modifier = Modifier.padding(end = 8.dp)
-                    ) {
-                        FilterChip(
-                            selected = state.type == "movie",
-                            onClick = { viewModel.setType("movie") },
-                            label = { Text("Movies") }
-                        )
-                        FilterChip(
-                            selected = state.type == "series",
-                            onClick = { viewModel.setType("series") },
-                            label = { Text("Series") }
-                        )
-                    }
-                }
-            )
-        }
+        containerColor = Color(0xFF0A0A0A)
     ) { padding ->
         when {
             state.isLoading && state.rows.isEmpty() && state.continueWatching.isEmpty() -> {
@@ -110,12 +72,32 @@ fun FeaturedScreen(
                     contentPadding = PaddingValues(bottom = 16.dp)
                 ) {
                     item {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 8.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            FilterChip(
+                                selected = state.type == "movie",
+                                onClick = { viewModel.setType("movie") },
+                                label = { Text("Movies") }
+                            )
+                            FilterChip(
+                                selected = state.type == "series",
+                                onClick = { viewModel.setType("series") },
+                                label = { Text("Series") }
+                            )
+                        }
+                    }
+                    item {
                         if (authState is AuthState.Authenticated) {
                             if (state.continueWatching.isNotEmpty()) {
                                 ContinueWatchingCarouselRow(
                                     title = "Continue Watching",
                                     items = state.continueWatching,
-                                    onItemClick = onItemClick
+                                    onItemClick = onItemClick,
+                                    onClearProgress = { viewModel.clearProgress(it) }
                                 )
                                 HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
                             } else {

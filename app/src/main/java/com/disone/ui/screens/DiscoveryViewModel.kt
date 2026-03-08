@@ -40,6 +40,7 @@ class DiscoveryViewModel @Inject constructor(
 
     init {
         viewModelScope.launch {
+            addonManager.ensureDefaultAddons() // Ensure addons before loading catalogs (Popular, New, Netflix, etc.)
             loadManifest()
             loadCatalog()
         }
@@ -79,7 +80,9 @@ class DiscoveryViewModel @Inject constructor(
             _state.value = _state.value.copy(isLoading = true, error = null)
             val s = _state.value
             val extraParams = buildMap<String, String> {
-                s.genre?.let { put("genre", it) }
+                // When genreRequired (e.g. "New" year catalog), we must pass genre - use first option if none selected
+                val genreToPass = s.genre ?: if (s.genreRequired && s.genreOptions.isNotEmpty()) s.genreOptions.first() else null
+                genreToPass?.let { put("genre", it) }
                 if (s.searchQuery.isNotBlank()) put("search", s.searchQuery)
                 if (s.skip > 0) put("skip", s.skip.toString())
             }.takeIf { it.isNotEmpty() }
@@ -167,8 +170,9 @@ class DiscoveryViewModel @Inject constructor(
         _state.value = _state.value.copy(skip = _state.value.items.size)
         viewModelScope.launch {
             val s = _state.value
+            val genreToPass = s.genre ?: if (s.genreRequired && s.genreOptions.isNotEmpty()) s.genreOptions.first() else null
             val extraParams = buildMap<String, String> {
-                s.genre?.let { put("genre", it) }
+                genreToPass?.let { put("genre", it) }
                 if (s.searchQuery.isNotBlank()) put("search", s.searchQuery)
                 put("skip", s.skip.toString())
             }

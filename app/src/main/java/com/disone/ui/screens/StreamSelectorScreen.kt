@@ -3,8 +3,6 @@ package com.disone.ui.screens
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -17,7 +15,7 @@ import com.disone.ui.components.PlanBadge
 @Composable
 fun StreamSelectorScreen(
     itemId: String,
-    onPlayStream: (com.disone.core.addons.DisoneStream) -> Unit,
+    onPlayStream: (com.disone.core.addons.DisoneStream, resumeFromMs: Long) -> Unit,
     onBack: () -> Unit,
     onDiscover: () -> Unit = {},
     viewModel: StreamSelectorViewModel = hiltViewModel()
@@ -29,20 +27,7 @@ fun StreamSelectorScreen(
     }
 
     Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("Select Stream") },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface,
-                    titleContentColor = MaterialTheme.colorScheme.onSurface
-                )
-            )
-        }
+        containerColor = MaterialTheme.colorScheme.surface
     ) { padding ->
         Column(
             modifier = Modifier
@@ -79,7 +64,7 @@ fun StreamSelectorScreen(
                             stream.disoneStream?.let { ds ->
                                 StreamOptionCard(
                                     stream = stream,
-                                    onPlay = { if (!stream.requiresPremium) onPlayStream(ds) }
+                                    onPlay = { if (!stream.requiresPremium) onPlayStream(ds, state.savedProgressMs) }
                                 )
                             }
                         }
@@ -125,7 +110,7 @@ private fun formatSize(bytes: Long): String {
 }
 
 @Composable
-private fun StreamOptionCard(
+internal fun StreamOptionCard(
     stream: StreamOptionUi,
     onPlay: () -> Unit
 ) {

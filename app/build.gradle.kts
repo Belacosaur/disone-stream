@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -10,16 +12,56 @@ android {
     namespace = "com.disone"
     compileSdk = 34
 
+    val keystorePropertiesFile = rootProject.file("keystore.properties")
+    val dappStoreKeystoreFile = rootProject.file("keystore.dappstore.properties")
+    if (keystorePropertiesFile.exists()) {
+        val keystoreProperties = Properties()
+        keystoreProperties.load(keystorePropertiesFile.inputStream())
+        signingConfigs {
+            create("release") {
+                keyAlias = keystoreProperties["keyAlias"] as String
+                keyPassword = keystoreProperties["keyPassword"] as String
+                storeFile = rootProject.file(keystoreProperties["storeFile"] as String)
+                storePassword = keystoreProperties["storePassword"] as String
+            }
+        }
+    }
+    if (dappStoreKeystoreFile.exists()) {
+        val props = Properties()
+        props.load(dappStoreKeystoreFile.inputStream())
+        signingConfigs {
+            create("dappStore") {
+                keyAlias = props["keyAlias"] as String
+                keyPassword = props["keyPassword"] as String
+                storeFile = rootProject.file(props["storeFile"] as String)
+                storePassword = props["storePassword"] as String
+            }
+        }
+    }
+
+    flavorDimensions += "store"
+    productFlavors {
+        create("playStore") {
+            dimension = "store"
+        }
+        create("dappStore") {
+            dimension = "store"
+        }
+    }
+
     defaultConfig {
-        applicationId = "com.disone"
+        applicationId = "com.disone.app"
         minSdk = 24
         targetSdk = 34
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = 7
+        versionName = "4.0"
+        // Override for custom domain if Railway's *.up.railway.app has DNS issues on some networks
+        buildConfigField("String", "API_BASE_URL", "\"https://disone-api.up.railway.app/\"")
     }
 
     buildTypes {
         release {
+            signingConfig = null // Set per-variant in androidComponents
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(
@@ -40,6 +82,7 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 
     composeOptions {
@@ -50,6 +93,20 @@ android {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
         }
+    }
+}
+
+androidComponents {
+    onVariants { variant ->
+        val ext = extensions.getByType(com.android.build.gradle.AppExtension::class.java)
+        val configs = ext.signingConfigs
+        val config = when {
+            variant.name.contains("dappStore") && configs.findByName("dappStore") != null ->
+                configs.getByName("dappStore")
+            rootProject.file("keystore.properties").exists() -> configs.getByName("release")
+            else -> null
+        }
+        config?.let { variant.signingConfig?.setConfig(it) }
     }
 }
 
@@ -124,4 +181,17 @@ dependencies {
 
 kapt {
     correctErrorTypes = true
+}
+
+tasks.register("copyDappStoreApkForPublishing") {
+    dependsOn("assembleDappStoreRelease")
+    doLast {
+        val apk = file("build/outputs/apk/dappStore/release/app-dappStore-release.apk")
+        val dest = file("${rootProject.projectDir}/dapp-store-publishing/files/app-dappStore-release.apk")
+        if (apk.exists()) {
+            dest.parentFile.mkdirs()
+            apk.copyTo(dest, overwrite = true)
+            println("Copied dApp Store APK to ${dest.path}")
+        }
+    }
 }

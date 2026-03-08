@@ -2,6 +2,7 @@ package com.disone.di
 
 import com.google.gson.Gson
 import com.google.gson.GsonBuilder
+import com.disone.BuildConfig
 import com.disone.core.api.AddonApi
 import com.disone.core.api.AuthApi
 import com.disone.core.api.CommentsApi
@@ -31,12 +32,12 @@ object AppModule {
     @Provides
     @Singleton
     @Named("apiBaseUrl")
-    fun provideApiBaseUrl(): String = "https://disone-api.up.railway.app/"
+    fun provideApiBaseUrl(): String = BuildConfig.API_BASE_URL
 
     @Provides
     @Singleton
     @Named("authBaseUrl")
-    fun provideAuthBaseUrl(): String = "https://disone-api.up.railway.app/"
+    fun provideAuthBaseUrl(): String = BuildConfig.API_BASE_URL
 
     @Provides
     @Singleton

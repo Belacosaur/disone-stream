@@ -21,6 +21,7 @@ import com.disone.core.playback.PendingPlayHolder
 import com.disone.core.player.VlcPlayerEngine
 import com.disone.core.streaming.StreamingRepository
 import com.disone.core.utils.toItemId
+import com.disone.core.addons.DefaultAddons
 import com.disone.core.torrent.TorrentSession
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
@@ -39,6 +40,10 @@ data class PlayerState(
     val accessDeniedReason: String? = null, // "expired" | "subscription_required"
     val accessChecking: Boolean = false,
     val isBuffering: Boolean = false,
+    /** Title/background/logo shown while buffering (Stremio-style loading overlay) */
+    val loadingTitle: String? = null,
+    val loadingBackgroundUrl: String? = null,
+    val loadingLogoUrl: String? = null,
     val error: String? = null,
     val peerCount: Int = 0,
     val isPlaying: Boolean = false,
@@ -95,6 +100,8 @@ class PlayerViewModel @Inject constructor(
     private var progressJob: Job? = null
     private var lastProgressUpdateMs: Long = 0
     private var currentLibraryItemId: String? = null
+    /** For series: episode ID (tt0944947:1:1) for progress. Null for movies. */
+    private var currentVideoId: String? = null
     private var pendingMagnetAndIndex: Pair<String, Int>? = null
 
     init {
@@ -238,7 +245,7 @@ class PlayerViewModel @Inject constructor(
         if (now - lastProgressUpdateMs < 30_000) return
         lastProgressUpdateMs = now
         viewModelScope.launch {
-            libraryRepository.updateProgress(libId, positionMs, durationMs).onSuccess {
+            libraryRepository.updateProgress(libId, positionMs, durationMs, currentVideoId).onSuccess {
                 lastProgressUpdateMs = now
             }
         }
@@ -263,8 +270,12 @@ class PlayerViewModel @Inject constructor(
             access.fold(
                 onSuccess = { resp ->
                     if (resp.canWatch) {
-                        pendingPlayHolder.takePending()
-                        playStream(stream)
+                        val (s, startPositionMs) = pendingPlayHolder.takePending()
+                        if (s != null) {
+                            playStream(s, startPositionMs)
+                        } else {
+                            _state.value = _state.value.copy(error = "No stream to play")
+                        }
                     } else {
                         _state.value = _state.value.copy(accessDenied = true, accessDeniedReason = resp.reason, error = null)
                     }
@@ -373,9 +384,9 @@ class PlayerViewModel @Inject constructor(
             access.fold(
                 onSuccess = { resp ->
                     if (resp.canWatch) {
-                        val stream = pendingPlayHolder.takePending()
+                        val (stream, startPositionMs) = pendingPlayHolder.takePending()
                         if (stream != null) {
-                            playStream(stream)
+                            playStream(stream, startPositionMs)
                         } else {
                             val args = pendingMagnetAndIndex
                             if (args != null) {
@@ -399,7 +410,8 @@ class PlayerViewModel @Inject constructor(
     private fun doPlay(magnet: String, fileIndex: Int) {
         playJob?.cancel()
         currentLibraryItemId = null
-        _state.value = _state.value.copy(extraSubtitleTracks = emptyList(), selectedExternalSubtitleUrl = null, overlaySubtitleCues = emptyList())
+        currentVideoId = null
+        _state.value = _state.value.copy(extraSubtitleTracks = emptyList(), selectedExternalSubtitleUrl = null, overlaySubtitleCues = emptyList(), loadingTitle = null, loadingBackgroundUrl = null, loadingLogoUrl = null)
         playJob = viewModelScope.launch {
             _state.value = _state.value.copy(isBuffering = true, error = null)
             val result = streamingRepository.play(magnet, fileIndex)
@@ -410,17 +422,61 @@ class PlayerViewModel @Inject constructor(
         }
     }
 
-    fun playStream(stream: DisoneStream) {
+    fun playStream(stream: DisoneStream, startPositionMs: Long = 0L) {
         playJob?.cancel()
-        currentLibraryItemId = stream.videoType?.let { t -> stream.videoId?.let { id -> toItemId(t, id) } }
+        val videoType = stream.videoType ?: "movie"
+        val videoId = stream.videoId?.trim()
+        // For series: library item is the series (series:tt0944947), videoId is the episode (tt0944947:1:1)
+        if (videoType == "series" && videoId != null && ":" in videoId) {
+            val seriesId = videoId.substringBefore(":")
+            currentLibraryItemId = toItemId("series", seriesId)
+            currentVideoId = videoId
+        } else {
+            currentLibraryItemId = stream.videoType?.let { t -> stream.videoId?.let { id -> toItemId(t, id) } }
+            currentVideoId = null
+        }
         _state.value = _state.value.copy(extraSubtitleTracks = emptyList(), selectedExternalSubtitleUrl = null, overlaySubtitleCues = emptyList())
+        // Pre-fill loading overlay; fetch meta for cover/background/logo; auto-add series to library for progress
+        val metaId = when {
+            videoId == null -> null
+            videoType == "series" && ":" in videoId -> videoId.substringBefore(":")
+            else -> videoId
+        }
+        val canFetchMeta = !metaId.isNullOrBlank() && (metaId.startsWith("tt") || metaId.startsWith("kx"))
+        _state.value = _state.value.copy(
+            isBuffering = true,
+            error = null,
+            loadingTitle = stream.title.takeIf { it.isNotBlank() },
+            loadingBackgroundUrl = null,
+            loadingLogoUrl = null
+        )
+        if (canFetchMeta && metaId != null) {
+            viewModelScope.launch {
+                addonManager.getMeta(DefaultAddons.cinemetaUrl, videoType, metaId).getOrNull()?.let { meta ->
+                    _state.value = _state.value.copy(
+                        loadingTitle = meta.name.takeIf { it.isNotBlank() } ?: _state.value.loadingTitle,
+                        loadingBackgroundUrl = meta.background ?: meta.poster,
+                        loadingLogoUrl = meta.logo
+                    )
+                    // Ensure series is in library so progress can be saved (updateProgress requires item to exist)
+                    if (videoType == "series") {
+                        libraryRepository.add(
+                            toItemId("series", metaId),
+                            meta.name,
+                            "series",
+                            metaId,
+                            meta.poster
+                        )
+                    }
+                }
+            }
+        }
         playJob = viewModelScope.launch {
-            _state.value = _state.value.copy(isBuffering = true, error = null)
             val result = streamingRepository.playStream(stream)
             result.fold(
                 onSuccess = { response ->
                     val magnet = stream.magnet ?: stream.infoHash?.let { "magnet:?xt=urn:btih:$it" } ?: ""
-                    handlePlayResponse(response, magnet, stream.fileIdx ?: 0)
+                    handlePlayResponse(response, magnet, stream.fileIdx ?: 0, startPositionMs)
                     fetchAddonSubtitlesIfNeeded(stream.videoType, stream.videoId)
                 },
                 onFailure = { _state.value = _state.value.copy(isBuffering = false, error = it.message) }
@@ -428,13 +484,39 @@ class PlayerViewModel @Inject constructor(
         }
     }
 
-    private suspend fun handlePlayResponse(response: PlayResponse, magnet: String, fileIndex: Int) {
+    /**
+     * Registers VLC's onMediaReady so the cover/logo overlay stays until the first frame plays.
+     * Clears buffering and loading overlay when VLC fires Playing event.
+     */
+    private fun setupMediaReadyCallback(streamUrl: String? = null, mediaPath: String? = null, startPositionMs: Long = 0L) {
+        vlcPlayer.setOnMediaReady {
+            _state.value = _state.value.copy(
+                isBuffering = false,
+                isPlaying = true,
+                currentStreamUrl = streamUrl,
+                currentMediaPath = mediaPath,
+                loadingTitle = null,
+                loadingBackgroundUrl = null,
+                loadingLogoUrl = null
+            )
+            startProgressPolling()
+            if (startPositionMs > 0) {
+                viewModelScope.launch {
+                    delay(500)
+                    vlcPlayer.seekTo(startPositionMs)
+                    _state.value = _state.value.copy(positionMs = startPositionMs)
+                }
+            }
+        }
+    }
+
+    private suspend fun handlePlayResponse(response: PlayResponse, magnet: String, fileIndex: Int, startPositionMs: Long = 0L) {
         when (response.mode.uppercase()) {
             "P2P" -> {
                 val infoHash = response.torrentMetadata?.infoHash
                 if (infoHash != null) {
                     torrentSession.addTorrent(magnet, fileIndex)
-                    waitForBuffer(infoHash, fileIndex)
+                    waitForBuffer(infoHash, fileIndex, startPositionMs)
                 } else {
                     _state.value = _state.value.copy(isBuffering = false, error = "No torrent metadata")
                 }
@@ -442,9 +524,8 @@ class PlayerViewModel @Inject constructor(
             "HOSTED_PROGRESSIVE" -> {
                 val url = response.streamUrl?.trim()
                 if (!url.isNullOrBlank()) {
+                    setupMediaReadyCallback(streamUrl = url, startPositionMs = startPositionMs)
                     vlcPlayer.playUrl(url)
-                    _state.value = _state.value.copy(isBuffering = false, isPlaying = true, currentStreamUrl = url, currentMediaPath = null)
-                    startProgressPolling()
                 } else {
                     _state.value = _state.value.copy(isBuffering = false, error = "No stream URL")
                 }
@@ -455,9 +536,8 @@ class PlayerViewModel @Inject constructor(
                     val streamUrl = hlsUrl
                         .replace("/hls/", "/stream/")
                         .replace("/playlist.m3u8", "")
+                    setupMediaReadyCallback(streamUrl = streamUrl, startPositionMs = startPositionMs)
                     vlcPlayer.playUrl(streamUrl)
-                    _state.value = _state.value.copy(isBuffering = false, isPlaying = true, currentStreamUrl = streamUrl, currentMediaPath = null)
-                    startProgressPolling()
                 } else {
                     _state.value = _state.value.copy(isBuffering = false, error = "No HLS URL")
                 }
@@ -468,7 +548,7 @@ class PlayerViewModel @Inject constructor(
         }
     }
 
-    private suspend fun waitForBuffer(infoHash: String, fileIndex: Int) {
+    private suspend fun waitForBuffer(infoHash: String, fileIndex: Int, startPositionMs: Long = 0L) {
         val minBufferBytes = 5 * 1024 * 1024L // 5MB
         repeat(120) {
             val progress = torrentSession.getProgress(infoHash)
@@ -477,9 +557,8 @@ class PlayerViewModel @Inject constructor(
                 if (progress.progressBytes >= minBufferBytes) {
                     val path = torrentSession.getFilePath(infoHash, fileIndex)
                     if (path != null && File(path).exists()) {
+                        setupMediaReadyCallback(mediaPath = path, startPositionMs = startPositionMs)
                         vlcPlayer.playLocal(path)
-                        _state.value = _state.value.copy(isBuffering = false, isPlaying = true, currentMediaPath = path, currentStreamUrl = null)
-                        startProgressPolling()
                         return
                     }
                 }
@@ -498,10 +577,11 @@ class PlayerViewModel @Inject constructor(
         val dur = vlcPlayer.getLength()
         if (currentLibraryItemId != null && pos >= 0 && dur > 0) {
             viewModelScope.launch {
-                libraryRepository.updateProgress(currentLibraryItemId!!, pos, dur)
+                libraryRepository.updateProgress(currentLibraryItemId!!, pos, dur, currentVideoId)
             }
         }
         currentLibraryItemId = null
+        currentVideoId = null
         playJob?.cancel()
         stopProgressPolling()
         vlcPlayer.stop()
@@ -511,7 +591,10 @@ class PlayerViewModel @Inject constructor(
             durationMs = -1L,
             extraSubtitleTracks = emptyList(),
             selectedExternalSubtitleUrl = null,
-            overlaySubtitleCues = emptyList()
+            overlaySubtitleCues = emptyList(),
+            loadingTitle = null,
+            loadingBackgroundUrl = null,
+            loadingLogoUrl = null
         )
     }
 

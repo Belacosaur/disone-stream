@@ -1,0 +1,62 @@
+# Solana dApp Store Publishing Config
+# See: https://docs.solanamobile.com/dapp-store/publishing-cli/prepare
+# Replace << >> placeholders before submission.
+
+publisher:
+  name: Disone Streaming
+  address: << Auto-populated by CLI >>
+  website: https://disone.stream
+  email: architect@obeliskprotocol.io
+  support_email: architect@obeliskprotocol.io
+  media:
+    - purpose: icon
+      uri: ./media/app_icon.png
+
+app:
+  name: Disone
+  address: << Auto-populated by CLI >>
+  android_package: com.disone.app
+  urls:
+    license_url: https://disone.stream/terms/
+    copyright_url: https://disone.stream
+    privacy_policy_url: https://disone.stream/privacy/
+    website: https://disone.stream
+  media:
+    - purpose: icon
+      uri: ./media/app_icon.png
+
+release:
+  address: << Auto-populated by CLI >>
+  media:
+    - purpose: icon
+      uri: ./media/app_icon.png
+    - purpose: banner
+      uri: ./media/banner_graphic.png
+    - purpose: screenshot
+      uri: ./media/screenshot_1.png
+    - purpose: screenshot
+      uri: ./media/screenshot_2.png
+    - purpose: screenshot
+      uri: ./media/screenshot_3.png
+    - purpose: screenshot
+      uri: ./media/screenshot_4.png
+  files:
+    - purpose: install
+      uri: ./files/app-dappStore-release.apk
+  catalog:
+    en-US:
+      name: Disone
+      short_description: Solana-powered streaming. Connect your wallet, browse, and watch.
+      long_description: |
+        Disone is a Solana-native streaming app. Connect your Phantom or Seed Vault wallet,
+        browse movies and series, and stream instantly. P2P access with wallet connect,
+        or subscribe for premium. Works with Stremio-compatible addons.
+      new_in_version: Initial Seeker dApp Store release.
+      saga_features: Seed Vault Wallet, MWA support.
+
+solana_mobile_dapp_publisher_portal:
+  google_store_package: com.disone.app
+  testing_instructions: |
+    Connect wallet (Phantom or Seed Vault) to sign in.
+    Browse featured content or use Discovery.
+    Select a title, choose a stream, and play.

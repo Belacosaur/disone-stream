@@ -83,19 +83,32 @@ data class AddonMeta(
     val poster: String? = null,
     val description: String? = null,
     @SerializedName("releaseInfo") val releaseInfo: String? = null,
-    val year: Int? = null,
+    /** Cinemeta returns year as string: movies "1999", series "2011–2019" (range). Int would fail on range. */
+    val year: String? = null,
     @SerializedName("imdbRating") val imdbRating: String? = null,
-    val videos: List<AddonVideo>? = null
+    val videos: List<AddonVideo>? = null,
+    /** Full-screen background for player loading (Cinemeta/Metahub) */
+    val background: String? = null,
+    /** Logo for buffering overlay (Cinemeta/Metahub) */
+    val logo: String? = null
 )
 
 data class AddonVideo(
     val id: String,
-    val title: String,
+    val title: String? = null,
+    val name: String? = null,
     @SerializedName("released") val released: String? = null,
     val season: Int? = null,
     val episode: Int? = null,
+    val number: Int? = null,
+    val thumbnail: String? = null,
+    val overview: String? = null,
+    val description: String? = null,
     val streams: List<AddonStreamRaw>? = null
-)
+) {
+    val displayTitle: String get() = title ?: name ?: "Episode"
+    val synopsis: String? get() = overview ?: description
+}
 
 // Stremio subtitles response - array of subtitle objects
 // GET {addonUrl}/subtitles/{type}/{videoId}.json

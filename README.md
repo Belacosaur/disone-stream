@@ -84,12 +84,16 @@ For wallet-based auth, deploy a service with:
 - `POST /auth/verify` with `{ "wallet", "signature", "nonce" }` → `{ "token", "expiresIn", "plan" }`
 
 
-### 3. Wallet Adapter
+### 3. API Base URL
+
+The API URL is set in `app/build.gradle.kts` via `buildConfigField("String", "API_BASE_URL", ...)`. Default: `https://disone-api.up.railway.app/`. Override for a custom domain or local dev.
+
+### 4. Wallet Adapter
 
 - Uses **Solana Mobile Wallet Adapter 2.0**
 - Requires an MWA-compatible wallet (e.g. Phantom, Solflare) installed on the device or emulator
 
-### 4. Permissions
+### 5. Permissions
 
 Declared in `AndroidManifest.xml`:
 
@@ -106,11 +110,22 @@ Declared in `AndroidManifest.xml`:
 # Debug
 ./gradlew assembleDebug
 
-# Release
-./gradlew assembleRelease
+# Play Store release (signed with android.keystore)
+./gradlew assemblePlayStoreRelease
+
+# Solana Seeker dApp Store release (signed with dappstore.keystore)
+./gradlew assembleDappStoreRelease
 ```
 
-Signing: configure `signingConfigs` in `app/build.gradle.kts` for release builds.
+**Build variants:**
+- **playStore** – for Google Play (uses `keystore.properties` + `android.keystore`)
+- **dappStore** – for Solana Seeker dApp Store (uses `keystore.dappstore.properties` + `dappstore.keystore`)
+
+Signing: configure `keystore.properties` and `keystore.dappstore.properties` for release builds.
+
+### Solana Seeker dApp Store
+
+See [dapp-store-publishing/README.md](dapp-store-publishing/README.md) for submission steps. The dApp Store requires a **separate signing key** from Google Play.
 
 ## Stremio Addon Compatibility
 
@@ -168,6 +183,22 @@ When the user taps **Play**:
 - **Unit tests**: Torrent prioritization, wallet signature flow
 - **Integration**: Magnet → buffer → playback
 - **Edge cases**: No peers, token expired, backend unavailable, low storage
+
+## Troubleshooting
+
+### "Unable to resolve host" / "No address associated with hostname"
+
+This is a **DNS/network issue**, not a Phantom compatibility problem. The backend uses standard Ed25519 signatures—Phantom is fully compatible. The failure happens when the app can't reach the API server.
+
+**Causes:** Some networks (certain carriers, corporate Wi‑Fi, restrictive DNS) don't resolve `*.up.railway.app` reliably.
+
+**Solutions:**
+1. Try a different network (Wi‑Fi vs mobile data).
+2. Use a **custom domain** on Railway (e.g. `api.disone.app`) and set it in `build.gradle.kts`:
+   ```kotlin
+   buildConfigField("String", "API_BASE_URL", "\"https://api.disone.app/\"")
+   ```
+3. Rebuild and reinstall the app after changing the API URL.
 
 ## Design
 

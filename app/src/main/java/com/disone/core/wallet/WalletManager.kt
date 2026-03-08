@@ -5,6 +5,7 @@ import android.util.Base64
 import com.solana.mobilewalletadapter.clientlib.ActivityResultSender
 import com.solana.mobilewalletadapter.clientlib.ConnectionIdentity
 import com.solana.mobilewalletadapter.clientlib.MobileWalletAdapter
+import com.solana.mobilewalletadapter.clientlib.Solana
 import com.solana.mobilewalletadapter.clientlib.TransactionResult
 import com.solana.publickey.SolanaPublicKey
 import com.solana.transaction.Message
@@ -18,12 +19,14 @@ import javax.inject.Singleton
 class WalletManager @Inject constructor() {
 
     private val identity = ConnectionIdentity(
-        identityUri = Uri.parse("https://disone.app"),
+        identityUri = Uri.parse("https://disone.stream"),
         iconUri = Uri.parse("favicon.ico"),
         identityName = "Disone"
     )
 
-    private val walletAdapter = MobileWalletAdapter(connectionIdentity = identity)
+    private val walletAdapter = MobileWalletAdapter(connectionIdentity = identity).apply {
+        blockchain = Solana.Mainnet
+    }
 
     suspend fun connect(activityResultSender: ActivityResultSender): Result<String> {
         return when (val result = walletAdapter.connect(activityResultSender)) {

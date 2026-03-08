@@ -25,6 +25,8 @@ fun WalletConnectScreen(
 
     LaunchedEffect(state) {
         if (state is WalletConnectState.Connected) {
+            // Brief delay to let the activity fully resume after returning from Phantom
+            kotlinx.coroutines.delay(150)
             onConnected()
         }
     }

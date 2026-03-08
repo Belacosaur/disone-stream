@@ -21,27 +21,33 @@ class AuthUseCase @Inject constructor(
      * connect and sign as separate screens.
      */
     suspend fun signInWithWallet(sender: ActivityResultSender): Result<Unit> {
-        val signResult = withContext(Dispatchers.Main.immediate) {
-            walletManager.connectAndSign(sender) { address ->
-                withContext(Dispatchers.IO) {
-                    val nonceResponse = authApi.getNonce(address)
-                    if (!nonceResponse.isSuccessful) {
-                        throw Exception("Failed to get nonce")
+        return try {
+            val signResult = withContext(Dispatchers.Main.immediate) {
+                walletManager.connectAndSign(sender) { address ->
+                    withContext(Dispatchers.IO) {
+                        val nonceResponse = authApi.getNonce(address)
+                        if (!nonceResponse.isSuccessful) {
+                            throw Exception("Failed to get nonce")
+                        }
+                        nonceResponse.body()?.nonce ?: throw Exception("No nonce")
                     }
-                    nonceResponse.body()?.nonce ?: throw Exception("No nonce")
                 }
             }
+            signResult.fold(
+                onSuccess = { sig ->
+                    val nonce = sig.message.removePrefix("Sign in to Disone: ")
+                    withContext(Dispatchers.IO) {
+                        authRepository.signIn(
+                            wallet = sig.address,
+                            signature = sig.signature,
+                            nonce = nonce
+                        )
+                    }
+                },
+                onFailure = { Result.failure(it) }
+            )
+        } catch (e: Exception) {
+            Result.failure(e)
         }
-        return signResult.fold(
-            onSuccess = { sig ->
-                val nonce = sig.message.removePrefix("Sign in to Disone: ")
-                authRepository.signIn(
-                    wallet = sig.address,
-                    signature = sig.signature,
-                    nonce = nonce
-                )
-            },
-            onFailure = { Result.failure(it) }
-        )
     }
 }

@@ -31,7 +31,9 @@ class AddonManager @Inject constructor(
         val allCatalogs = mutableListOf<AddonCatalog>()
         val seen = mutableSetOf<Pair<String, String>>()
         for (addon in catalogAddons) {
-            addonRepository.getManifest(addon.url).getOrNull()?.catalogs?.orEmpty()?.forEach { cat ->
+            val manifest = addonRepository.getManifest(addon.url).getOrNull() ?: continue
+            val cats = manifest.catalogs + (manifest.addonCatalogs.orEmpty())
+            cats.forEach { cat ->
                 val key = cat.type to cat.id
                 if (seen.add(key)) allCatalogs.add(cat)
             }

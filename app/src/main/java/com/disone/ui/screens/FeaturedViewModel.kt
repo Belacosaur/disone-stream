@@ -127,4 +127,14 @@ class FeaturedViewModel @Inject constructor(
         _state.value = _state.value.copy(type = type)
         load()
     }
+
+    fun clearProgress(libraryItemId: String) {
+        viewModelScope.launch {
+            libraryRepository.rewind(libraryItemId).onSuccess {
+                load()
+            }.onFailure {
+                _state.value = _state.value.copy(error = it.message)
+            }
+        }
+    }
 }

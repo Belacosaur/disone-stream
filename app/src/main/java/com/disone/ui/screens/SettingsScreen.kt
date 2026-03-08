@@ -32,20 +32,7 @@ fun SettingsScreen(
     viewModel: SettingsViewModel = hiltViewModel()
 ) {
     Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("Settings") },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface,
-                    titleContentColor = MaterialTheme.colorScheme.onSurface
-                )
-            )
-        }
+        containerColor = MaterialTheme.colorScheme.surface
     ) { padding ->
         Column(
             modifier = Modifier
@@ -61,7 +48,7 @@ fun SettingsScreen(
             HorizontalDivider()
             ListItem(
                 headlineContent = { Text("Downloads") },
-                supportingContent = { Text("/Android/data/com.disone/files/downloads/") }
+                supportingContent = { Text("/Android/data/com.disone.app/files/downloads/") }
             )
             ListItem(
                 headlineContent = { Text("Max concurrent torrents") },

@@ -31,3 +31,5 @@ local.properties
 # Keystore files
 *.jks
 *.keystore
+keystore.properties
+keystore.dappstore.properties

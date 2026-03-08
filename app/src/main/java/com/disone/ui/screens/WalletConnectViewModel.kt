@@ -71,11 +71,28 @@ class WalletConnectViewModel @Inject constructor(
     fun connectWallet(sender: ActivityResultSender) {
         viewModelScope.launch {
             _state.value = WalletConnectState.Loading
-            val result = authUseCase.signInWithWallet(sender)
-            result.fold(
-                onSuccess = { /* authState will update from flow */ },
-                onFailure = { _state.value = WalletConnectState.Error(it.message ?: "Auth failed") }
-            )
+            try {
+                val result = authUseCase.signInWithWallet(sender)
+                result.fold(
+                    onSuccess = { /* authState will update from flow */ },
+                    onFailure = { _state.value = WalletConnectState.Error(formatConnectionError(it.message)) }
+                )
+            } catch (e: Exception) {
+                _state.value = WalletConnectState.Error(formatConnectionError(e.message))
+            }
+        }
+    }
+
+    private fun formatConnectionError(raw: String?): String {
+        if (raw == null) return "Connection failed. Please try again."
+        return when {
+            raw.contains("Unable to resolve host", ignoreCase = true) ||
+            raw.contains("No address associated with hostname", ignoreCase = true) ->
+                "Can't reach server. Try a different network (Wi‑Fi or mobile data) or check your connection."
+            raw.contains("failed to connect", ignoreCase = true) ||
+            raw.contains("Connection refused", ignoreCase = true) ->
+                "Server unreachable. Check your connection and try again."
+            else -> raw
         }
     }
 

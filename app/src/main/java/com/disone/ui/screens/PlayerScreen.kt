@@ -38,6 +38,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.layout.ContentScale
+import coil.compose.AsyncImage
 import com.disone.core.subtitle.SubtitleCue
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.view.WindowCompat
@@ -65,6 +67,7 @@ fun PlayerScreen(
     usePendingStream: Boolean = false,
     onBack: () -> Unit,
     onDiscover: () -> Unit = {},
+    onFullscreenChange: (Boolean) -> Unit = {},
     viewModel: PlayerViewModel = hiltViewModel()
 ) {
     val state by viewModel.state.collectAsState()
@@ -91,6 +94,7 @@ fun PlayerScreen(
     }
 
     LaunchedEffect(state.isFullscreen) {
+        onFullscreenChange(state.isFullscreen)
         activity?.let { act ->
             val insetsController = WindowInsetsControllerCompat(act.window, view)
             WindowCompat.setDecorFitsSystemWindows(act.window, !state.isFullscreen)
@@ -100,6 +104,15 @@ fun PlayerScreen(
                     WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
             } else {
                 insetsController.show(WindowInsetsCompat.Type.systemBars())
+            }
+        }
+    }
+
+    DisposableEffect(Unit) {
+        onDispose {
+            activity?.let { act ->
+                WindowCompat.setDecorFitsSystemWindows(act.window, false)
+                WindowInsetsControllerCompat(act.window, view).show(WindowInsetsCompat.Type.systemBars())
             }
         }
     }
@@ -394,10 +407,49 @@ fun PlayerScreen(
                 }
             }
             state.isBuffering -> {
-                CircularProgressIndicator(
-                    modifier = Modifier.align(Alignment.Center),
-                    color = Color.White
-                )
+                // Stremio-style loading overlay: background image + title + logo/spinner
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .align(Alignment.Center)
+                ) {
+                    // Full-screen background (poster/backdrop) while loading
+                    state.loadingBackgroundUrl?.let { url ->
+                        AsyncImage(
+                            model = url,
+                            contentDescription = null,
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .drawBehind {
+                                    drawRect(Color.Black.copy(alpha = 0.4f))
+                                },
+                            contentScale = ContentScale.Crop,
+                            alpha = 0.6f
+                        )
+                    }
+                    if (state.loadingBackgroundUrl == null) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(Color.Black.copy(alpha = 0.7f))
+                        )
+                    }
+                    // Centered: logo (Stremio-style) or spinner
+                    Box(
+                        modifier = Modifier.align(Alignment.Center),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        if (state.loadingLogoUrl != null) {
+                            AsyncImage(
+                                model = state.loadingLogoUrl,
+                                contentDescription = null,
+                                modifier = Modifier.size(120.dp)
+                            )
+                        } else {
+                            CircularProgressIndicator(color = Color.White)
+                        }
+                    }
+                }
             }
             state.error != null && !state.accessDenied -> {
                 Text(

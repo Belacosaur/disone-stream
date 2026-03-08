@@ -4,6 +4,7 @@ import com.disone.core.api.LibraryApi
 import com.disone.core.auth.AuthRepository
 import com.disone.core.models.LibraryAddRequest
 import com.disone.core.models.LibraryItem
+import com.disone.core.models.LibraryProgress
 import com.disone.core.models.LibraryRewindRequest
 import com.disone.core.models.LibraryUpdateProgressRequest
 import javax.inject.Inject
@@ -58,6 +59,30 @@ class LibraryRepository @Inject constructor(
                 else -> Result.failure(Exception(response.errorBody()?.string() ?: "Failed"))
             }
         }.getOrElse { Result.failure(it) }
+    }
+
+    /** Fetches library progress for an item. Returns LibraryProgress or null if not in library or no progress. */
+    suspend fun getProgress(libraryItemId: String): Result<LibraryProgress?> {
+        val auth = authRepository.getAuthHeader() ?: return Result.success(null)
+        val id = if (libraryItemId.contains(":")) libraryItemId else "movie:$libraryItemId"
+        return runCatching {
+            val response = libraryApi.contains(auth, contentId = id)
+            when {
+                response.isSuccessful -> {
+                    val body = response.body()
+                    if (body?.inLibrary == true && body.timeOffset != null && body.timeOffset > 0 && body.isWatched != true) {
+                        LibraryProgress(body.timeOffset, body.duration ?: 0L, body.videoId)
+                    } else {
+                        null
+                    }
+                }
+                response.code() == 401 -> null
+                else -> throw Exception(response.errorBody()?.string() ?: "Failed")
+            }
+        }.fold(
+            onSuccess = { Result.success(it) },
+            onFailure = { Result.failure(it) }
+        )
     }
 
     suspend fun add(libraryItemId: String, name: String, type: String, metaId: String, poster: String? = null): Result<Unit> {

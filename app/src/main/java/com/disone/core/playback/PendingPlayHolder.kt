@@ -7,6 +7,7 @@ import javax.inject.Singleton
 /**
  * Holds a pending stream to play when navigating to Player.
  * Used for addon streams since we cannot easily pass complex objects via NavArgs.
+ * Optionally holds startPositionMs for resume-from-saved-progress.
  */
 @Singleton
 class PendingPlayHolder @Inject constructor() {
@@ -14,17 +15,23 @@ class PendingPlayHolder @Inject constructor() {
     @Volatile
     private var pending: DisoneStream? = null
 
-    fun setPending(stream: DisoneStream) {
+    @Volatile
+    private var startPositionMs: Long = 0L
+
+    fun setPending(stream: DisoneStream, resumeFromMs: Long = 0L) {
         pending = stream
+        startPositionMs = resumeFromMs
     }
 
     /** Peek without consuming — for access check before play. */
     fun peekPending(): DisoneStream? = pending
 
-    fun takePending(): DisoneStream? {
+    fun takePending(): Pair<DisoneStream?, Long> {
         val s = pending
+        val pos = startPositionMs
         pending = null
-        return s
+        startPositionMs = 0L
+        return (s to pos)
     }
 
     fun hasPending(): Boolean = pending != null

@@ -45,10 +45,12 @@ class AddonService @Inject constructor(
         extraParams: Map<String, String>? = null
     ): Result<String> = withContext(Dispatchers.IO) {
         requestSemaphore.withPermit {
+            // Stremio protocol: extraArgs is "key=value" where only values are URL-encoded (e.g. "search=game%20of%20thrones&skip=100")
             val encodedExtra = when {
                 extraParams != null && extraParams.isNotEmpty() -> {
-                    val query = extraParams.entries.joinToString("&") { (k, v) -> "$k=$v" }
-                    URLEncoder.encode(query, StandardCharsets.UTF_8.name())
+                    extraParams.entries.joinToString("&") { (k, v) ->
+                        "$k=${URLEncoder.encode(v, StandardCharsets.UTF_8.name())}"
+                    }
                 }
                 extra != null -> extra
                 else -> null

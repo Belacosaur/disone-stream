@@ -9,6 +9,7 @@ import com.disone.core.addons.DisoneStream
 import com.disone.core.addons.StreamNormalizer
 import com.disone.core.auth.AuthRepository
 import com.disone.core.auth.AuthState
+import com.disone.core.library.LibraryRepository
 import com.disone.core.models.StreamOption
 import com.disone.core.streaming.StreamingRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -36,7 +37,8 @@ data class StreamOptionUi(
 data class StreamSelectorState(
     val streams: List<StreamOptionUi> = emptyList(),
     val isLoading: Boolean = false,
-    val magnetDialogOpen: Boolean = false
+    val magnetDialogOpen: Boolean = false,
+    val savedProgressMs: Long = 0L
 )
 
 @HiltViewModel
@@ -46,6 +48,7 @@ class StreamSelectorViewModel @Inject constructor(
     private val addonParser: AddonParser,
     private val streamNormalizer: StreamNormalizer,
     private val authRepository: AuthRepository,
+    private val libraryRepository: LibraryRepository,
     savedStateHandle: SavedStateHandle
 ) : ViewModel() {
 
@@ -72,8 +75,12 @@ class StreamSelectorViewModel @Inject constructor(
 
     fun loadStreams(itemId: String) {
         viewModelScope.launch {
-            _state.value = _state.value.copy(isLoading = true)
+            _state.value = _state.value.copy(isLoading = true, savedProgressMs = 0L)
             val plan = (authRepository.authState.first() as? AuthState.Authenticated)?.plan?.uppercase() ?: "P2P"
+
+            val libraryItemId = if (itemId.contains(":")) itemId else "movie:$itemId"
+            val progress = libraryRepository.getProgress(libraryItemId).getOrNull()
+            val savedProgressMs = progress?.timeOffsetMs ?: 0L
 
             fun mapToUi(disoneStreams: List<DisoneStream>) = disoneStreams.map { s ->
                 val isHostedOnly = s.magnet == null && s.infoHash == null
@@ -99,7 +106,7 @@ class StreamSelectorViewModel @Inject constructor(
                     disoneStreams = fetchStreamsFromTorrentio(type, videoId)
                 }
                 val withContext = disoneStreams.map { it.copy(videoType = type, videoId = videoId) }
-                _state.value = _state.value.copy(streams = mapToUi(withContext), isLoading = false)
+                _state.value = _state.value.copy(streams = mapToUi(withContext), isLoading = false, savedProgressMs = savedProgressMs)
             } else {
                 val typesToTry = if (itemId.startsWith("tt") || itemId.startsWith("kitsu")) {
                     listOf("movie", "series", "anime")
@@ -117,7 +124,7 @@ class StreamSelectorViewModel @Inject constructor(
                 }
                 if (addonStreams != null && addonStreams.isNotEmpty() && resolvedType != null) {
                     val withContext = addonStreams.map { it.copy(videoType = resolvedType, videoId = itemId) }
-                    _state.value = _state.value.copy(streams = mapToUi(withContext), isLoading = false)
+                    _state.value = _state.value.copy(streams = mapToUi(withContext), isLoading = false, savedProgressMs = savedProgressMs)
                 } else {
                     streamingRepository.getCatalog(page = 1).fold(
                         onSuccess = { page ->
@@ -139,10 +146,10 @@ class StreamSelectorViewModel @Inject constructor(
                                     )
                                 )
                             } ?: emptyList()
-                            _state.value = _state.value.copy(streams = streams, isLoading = false)
+                            _state.value = _state.value.copy(streams = streams, isLoading = false, savedProgressMs = savedProgressMs)
                         },
                         onFailure = {
-                            _state.value = _state.value.copy(streams = emptyList(), isLoading = false)
+                            _state.value = _state.value.copy(streams = emptyList(), isLoading = false, savedProgressMs = savedProgressMs)
                         }
                     )
                 }

@@ -24,31 +24,25 @@ fun AddonManagerScreen(
     val errorMessage by viewModel.errorMessage.collectAsState()
 
     Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("Addon Manager") },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                    }
-                },
-                actions = {
-                    IconButton(onClick = { viewModel.showAddUrlDialog() }) {
-                        Icon(Icons.Default.Add, contentDescription = "Add addon")
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface,
-                    titleContentColor = MaterialTheme.colorScheme.onSurface
-                )
-            )
-        }
+        containerColor = MaterialTheme.colorScheme.surface
     ) { padding ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
         ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("Addon Manager", style = MaterialTheme.typography.titleLarge)
+                IconButton(onClick = { viewModel.showAddUrlDialog() }) {
+                    Icon(Icons.Default.Add, contentDescription = "Add addon")
+                }
+            }
             Text(
                 "Stremio-compatible addons provide catalogs and streams. Add addon URLs to browse content.",
                 style = MaterialTheme.typography.bodyMedium,
