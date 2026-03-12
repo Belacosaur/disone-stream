@@ -21,7 +21,16 @@ data class CreateTransactionRequest(
 )
 
 data class CreateTransactionResponse(
-    val transaction: String
+    val transaction: String,
+    @SerializedName("lastValidBlockHeight") val lastValidBlockHeight: Long? = null
+)
+
+data class SubmitSignedTransactionRequest(
+    @SerializedName("signed_transaction") val signedTransaction: String
+)
+
+data class SubmitSignedTransactionResponse(
+    val signature: String
 )
 
 data class SubscriptionPackagesResponse(

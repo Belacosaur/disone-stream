@@ -12,7 +12,7 @@ import retrofit2.http.Query
 interface AuthApi {
 
     @GET("auth/nonce")
-    suspend fun getNonce(@Query("wallet") wallet: String): Response<NonceResponse>
+    suspend fun getNonce(@Query("wallet") wallet: String? = null): Response<NonceResponse>
 
     @POST("auth/verify")
     suspend fun verify(@Body request: AuthVerifyRequest): Response<AuthVerifyResponse>

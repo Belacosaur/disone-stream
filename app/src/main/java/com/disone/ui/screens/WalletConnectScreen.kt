@@ -118,7 +118,7 @@ fun WalletConnectScreen(
                         },
                         modifier = Modifier.height(56.dp)
                     ) {
-                        Text("Connect Wallet")
+                        Text("Sign In")
                     }
                 }
             }

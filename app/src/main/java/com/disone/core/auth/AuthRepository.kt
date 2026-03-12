@@ -24,15 +24,16 @@ class AuthRepository @Inject constructor(
     val authState: StateFlow<AuthState> = _authState.asStateFlow()
 
     suspend fun initialize() {
-        addonRepository.ensureDefaultAddons()
         val token = tokenStorage.getToken()
         val plan = tokenStorage.getPlan()
         val wallet = tokenStorage.getWallet()
         if (token != null && wallet != null) {
             _authState.value = AuthState.Authenticated(wallet = wallet, plan = plan ?: "P2P", token = token)
+            addonRepository.ensureDefaultAddons()
             addonRepository.syncFromServer()
         } else {
             _authState.value = AuthState.Unauthenticated
+            addonRepository.ensureDefaultAddons()
         }
     }
 
@@ -58,10 +59,11 @@ class AuthRepository @Inject constructor(
                     }
                 }
                 response.code() == HttpURLConnection.HTTP_UNAUTHORIZED -> {
-                    Result.failure(Exception("Invalid signature"))
+                    Result.failure(Exception("Invalid signature. Please try connecting again."))
                 }
                 else -> {
-                    Result.failure(Exception(response.errorBody()?.string() ?: "Auth failed"))
+                    val errBody = response.errorBody()?.string()?.trim()
+                    Result.failure(Exception(errBody ?: "Auth failed (HTTP ${response.code()})"))
                 }
             }
         } catch (e: Exception) {
@@ -87,6 +89,9 @@ class AuthRepository @Inject constructor(
         val token = tokenStorage.getToken()
         return if (token != null) "Bearer $token" else null
     }
+
+    /** Current wallet address when authenticated. Used to pre-fetch transactions before opening wallet. */
+    fun getCurrentWallet(): String? = tokenStorage.getWallet()
 }
 
 sealed class AuthState {

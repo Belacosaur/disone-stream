@@ -192,6 +192,8 @@ This is a **DNS/network issue**, not a Phantom compatibility problem. The backen
 
 **Causes:** Some networks (certain carriers, corporate Wi‑Fi, restrictive DNS) don't resolve `*.up.railway.app` reliably.
 
+**TimeoutException ("Timed out waiting for response")**: Phantom didn't respond to the signing request. This often happens when Phantom shows a blank screen instead of the transaction approval. Use the two-tap flow: 1) Tap a plan and wait for it to prepare, 2) Tap "Pay with Phantom" when the button appears.
+
 **Solutions:**
 1. Try a different network (Wi‑Fi vs mobile data).
 2. Use a **custom domain** on Railway (e.g. `api.disone.app`) and set it in `build.gradle.kts`:
@@ -199,6 +201,23 @@ This is a **DNS/network issue**, not a Phantom compatibility problem. The backen
    buildConfigField("String", "API_BASE_URL", "\"https://api.disone.app/\"")
    ```
 3. Rebuild and reinstall the app after changing the API URL.
+
+### Subscription / Wallet Logging
+
+Verbose logs are reduced by default. To capture **critical subscription flow logs** only:
+
+```powershell
+# Option 1: Use the helper script (works without adb in PATH)
+.\logcat-subscription.ps1
+
+# Option 2: Use adb directly (if in PATH)
+adb logcat WalletManager:* SubscriptionUseCase:* WalletConnect:* okhttp.OkHttpClient:W *:S
+
+# Option 3: If adb not in PATH, use full path
+& "$env:LOCALAPPDATA\Android\Sdk\platform-tools\adb.exe" logcat WalletManager:* SubscriptionUseCase:* WalletConnect:* okhttp.OkHttpClient:W *:S
+```
+
+Run from the `disone-stream` directory. Shows wallet/subscription/HTTP logs; `*:S` silences other tags.
 
 ## Design
 

@@ -15,6 +15,7 @@ import com.disone.core.models.PlayResponse
 import com.disone.core.models.SubscriptionPackage
 import com.disone.core.player.AudioTrack
 import com.disone.core.player.SubtitleTrack
+import com.disone.core.auth.AuthRepository
 import com.disone.core.access.AccessRepository
 import com.disone.core.library.LibraryRepository
 import com.disone.core.playback.PendingPlayHolder
@@ -77,6 +78,7 @@ class PlayerViewModel @Inject constructor(
     private val addonService: AddonService,
     private val libraryRepository: LibraryRepository,
     private val accessRepository: AccessRepository,
+    private val authRepository: AuthRepository,
     private val subscriptionUseCase: SubscriptionUseCase
 ) : ViewModel() {
 
@@ -91,6 +93,13 @@ class PlayerViewModel @Inject constructor(
     val packagesLoading: StateFlow<Boolean> = _packagesLoading.asStateFlow()
     private val _purchaseInProgress = MutableStateFlow(false)
     val purchaseInProgress: StateFlow<Boolean> = _purchaseInProgress.asStateFlow()
+    /** Package we're currently fetching tx for (phase 1). */
+    private val _preparingPackage = MutableStateFlow<SubscriptionPackage?>(null)
+    val preparingPackage = _preparingPackage.asStateFlow()
+
+    /** When non-null, tx is fetched and ready – tap "Confirm Payment" to open wallet. */
+    private val _preparedForPurchase = MutableStateFlow<Pair<SubscriptionPackage, com.disone.core.subscription.SubscriptionRepository.CreateTransactionResult>?>(null)
+    val preparedForPurchase = _preparedForPurchase.asStateFlow()
     private val _pendingVerification = MutableStateFlow<Pair<String, String>?>(null)
     val pendingVerification: StateFlow<Pair<String, String>?> = _pendingVerification.asStateFlow()
     private val _purchaseConfirmation = MutableStateFlow<PurchaseConfirmation?>(null)
@@ -325,16 +334,42 @@ class PlayerViewModel @Inject constructor(
         }
     }
 
-    fun purchasePackage(
-        activityResultSender: ActivityResultSender,
-        packageItem: SubscriptionPackage,
-        onResult: (Result<PurchaseConfirmation>, canRetryVerification: Boolean) -> Unit
-    ) {
+    /** Step 1: Fetch tx from backend. No Phantom. Call when user taps a package. */
+    fun prepareForPurchase(packageItem: SubscriptionPackage, onResult: (Result<Unit>) -> Unit) {
+        val wallet = authRepository.getCurrentWallet()
+        if (wallet == null) {
+            onResult(Result.failure(Exception("Not logged in. Sign in first.")))
+            return
+        }
         viewModelScope.launch {
             _purchaseInProgress.value = true
-            _pendingVerification.value = null
+            _preparingPackage.value = packageItem
+            _preparedForPurchase.value = null
+            val txResult = subscriptionUseCase.prepareTransaction(packageItem.packageKey, wallet)
+            _preparingPackage.value = null
+            _purchaseInProgress.value = false
+            txResult.fold(
+                onSuccess = { tx -> _preparedForPurchase.value = packageItem to tx; onResult(Result.success(Unit)) },
+                onFailure = { onResult(Result.failure(it)) }
+            )
+        }
+    }
+
+    /** Step 2: Open Phantom with PRE-FETCHED tx. Only call after prepareForPurchase succeeds. */
+    fun confirmPurchase(
+        activityResultSender: ActivityResultSender,
+        onResult: (Result<PurchaseConfirmation>, canRetryVerification: Boolean) -> Unit
+    ) {
+        val prepared = _preparedForPurchase.value ?: run {
+            onResult(Result.failure(Exception("Transaction expired. Tap a plan again.")), false)
+            return
+        }
+        val (packageItem, txResult) = prepared
+        viewModelScope.launch {
+            _purchaseInProgress.value = true
+            _preparedForPurchase.value = null
             _purchaseConfirmation.value = null
-            val result = subscriptionUseCase.purchase(activityResultSender, packageItem)
+            val result = subscriptionUseCase.signAndCompletePurchase(activityResultSender, packageItem, txResult)
             _purchaseInProgress.value = false
             result.onSuccess { confirmation ->
                 _pendingVerification.value = null
@@ -349,6 +384,24 @@ class PlayerViewModel @Inject constructor(
                 }
                 onResult(result, canRetry)
             }
+        }
+    }
+
+    fun clearPreparedForPurchase() {
+        _preparingPackage.value = null
+        _preparedForPurchase.value = null
+    }
+
+    /** Legacy one-tap (kept for fallback). Prefer prepareForPurchase + confirmPurchase. */
+    fun purchasePackage(
+        activityResultSender: ActivityResultSender,
+        packageItem: SubscriptionPackage,
+        onResult: (Result<PurchaseConfirmation>, canRetryVerification: Boolean) -> Unit
+    ) {
+        prepareForPurchase(packageItem) { prepareResult ->
+            prepareResult.onSuccess {
+                confirmPurchase(activityResultSender, onResult)
+            }.onFailure { onResult(Result.failure(it), false) }
         }
     }
 

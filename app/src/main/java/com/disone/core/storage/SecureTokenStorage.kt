@@ -58,7 +58,24 @@ class SecureTokenStorage @Inject constructor(
     fun getWallet(): String? = sharedPreferences.getString(KEY_WALLET, null)
 
     fun clear() {
-        sharedPreferences.edit().clear().apply()
+        sharedPreferences.edit().apply {
+            remove(KEY_TOKEN)
+            remove(KEY_TOKEN_EXPIRY)
+            remove(KEY_PLAN)
+            remove(KEY_WALLET)
+            apply()
+            // Keep KEY_MWA_AUTH – never clear. Sign In only needs it to skip Connect popup.
+        }
+    }
+
+    fun saveMwAuthToken(token: String) {
+        sharedPreferences.edit().putString(KEY_MWA_AUTH, token).commit()
+    }
+
+    fun getMwAuthToken(): String? = sharedPreferences.getString(KEY_MWA_AUTH, null)
+
+    fun clearMwAuthToken() {
+        sharedPreferences.edit().remove(KEY_MWA_AUTH).apply()
     }
 
     companion object {
@@ -66,5 +83,6 @@ class SecureTokenStorage @Inject constructor(
         private const val KEY_TOKEN_EXPIRY = "jwt_expiry"
         private const val KEY_PLAN = "plan"
         private const val KEY_WALLET = "wallet"
+        private const val KEY_MWA_AUTH = "mwa_auth_token"
     }
 }

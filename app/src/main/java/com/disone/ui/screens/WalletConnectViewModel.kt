@@ -1,6 +1,7 @@
 package com.disone.ui.screens
 
 import android.app.Activity
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.disone.core.access.AccessRepository
@@ -39,10 +40,10 @@ class WalletConnectViewModel @Inject constructor(
 
     init {
         viewModelScope.launch {
-            authRepository.initialize()
+            authRepository.authState.collect { updateFromAuth(it) }
         }
         viewModelScope.launch {
-            authRepository.authState.collect { updateFromAuth(it) }
+            authUseCase.warmUpNetwork()
         }
     }
 
@@ -75,25 +76,42 @@ class WalletConnectViewModel @Inject constructor(
                 val result = authUseCase.signInWithWallet(sender)
                 result.fold(
                     onSuccess = { /* authState will update from flow */ },
-                    onFailure = { _state.value = WalletConnectState.Error(formatConnectionError(it.message)) }
+                    onFailure = {
+                        Log.e("WalletConnect", "Auth failed", it)
+                        _state.value = WalletConnectState.Error(formatConnectionError(it))
+                    }
                 )
             } catch (e: Exception) {
-                _state.value = WalletConnectState.Error(formatConnectionError(e.message))
+                Log.e("WalletConnect", "Auth exception", e)
+                _state.value = WalletConnectState.Error(formatConnectionError(e))
             }
         }
     }
 
-    private fun formatConnectionError(raw: String?): String {
-        if (raw == null) return "Connection failed. Please try again."
-        return when {
+    private fun formatConnectionError(e: Throwable): String {
+        val raw = (e.cause?.message ?: e.message) ?: return "Connection failed. Please try again."
+        val hint = when {
             raw.contains("Unable to resolve host", ignoreCase = true) ||
             raw.contains("No address associated with hostname", ignoreCase = true) ->
-                "Can't reach server. Try a different network (Wi‑Fi or mobile data) or check your connection."
+                "Disone servers couldn't be reached. Try mobile data or a different network. $raw"
+            raw.contains("Failed to get nonce", ignoreCase = true) ||
+            raw.contains("Auth failed", ignoreCase = true) ->
+                raw
             raw.contains("failed to connect", ignoreCase = true) ||
-            raw.contains("Connection refused", ignoreCase = true) ->
-                "Server unreachable. Check your connection and try again."
+            raw.contains("Connection refused", ignoreCase = true) ||
+            raw.contains("Connection reset", ignoreCase = true) ->
+                "Couldn't connect to Disone. $raw"
+            raw.contains("timeout", ignoreCase = true) ||
+            raw.contains("timed out", ignoreCase = true) ->
+                "Request timed out. $raw"
+            raw.contains("Unable to connect to websocket", ignoreCase = true) ->
+                "Wallet connection failed. Disable battery saver for Disone and your wallet app, then try again."
+            raw.contains("SSL", ignoreCase = true) ||
+            raw.contains("certificate", ignoreCase = true) ->
+                "Secure connection failed. $raw"
             else -> raw
         }
+        return hint
     }
 
     fun setError(message: String) {

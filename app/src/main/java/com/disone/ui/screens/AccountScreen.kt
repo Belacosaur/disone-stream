@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
@@ -28,6 +29,7 @@ import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Button
 import androidx.compose.material3.AlertDialog
+import androidx.compose.ui.window.Dialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -45,6 +47,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import kotlinx.coroutines.delay
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -84,6 +87,8 @@ fun AccountScreen(
     val recipientAddress by viewModel.recipientAddress.collectAsState()
     val packagesLoading by viewModel.packagesLoading.collectAsState()
     val purchaseInProgress by viewModel.purchaseInProgress.collectAsState()
+    val preparedForPurchase by viewModel.preparedForPurchase.collectAsState()
+    val preparingPackage by viewModel.preparingPackage.collectAsState()
     val pendingVerification by viewModel.pendingVerification.collectAsState()
     val purchaseConfirmation by viewModel.purchaseConfirmation.collectAsState()
     val activityResultSender = LocalActivityResultSender.current
@@ -321,8 +326,75 @@ fun AccountScreen(
     }
 
     if (showPackagesSheet) {
+        var payButtonReady by remember { mutableStateOf(false) }
+        LaunchedEffect(preparedForPurchase) {
+            if (preparedForPurchase != null) {
+                payButtonReady = false
+                delay(400)
+                payButtonReady = true
+            } else {
+                payButtonReady = false
+            }
+        }
+        if (preparedForPurchase != null) {
+            val preparedPkg = preparedForPurchase!!.first
+            val canPurchase = !recipientAddress.isNullOrBlank() && activityResultSender != null
+            Dialog(
+                onDismissRequest = { if (!purchaseInProgress) viewModel.clearPreparedForPurchase() }
+            ) {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                ) {
+                    Column(modifier = Modifier.padding(24.dp)) {
+                        Text("Confirm payment", style = MaterialTheme.typography.titleLarge)
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Text(preparedPkg.name, style = MaterialTheme.typography.titleMedium)
+                        Text("${formatSolAmount(preparedPkg.amountSol)} SOL", style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.primary)
+                        Spacer(modifier = Modifier.height(24.dp))
+                        if (purchaseInProgress) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.Center,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                androidx.compose.material3.CircularProgressIndicator(modifier = Modifier.size(24.dp))
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Text("Verifying payment…", style = MaterialTheme.typography.bodyMedium)
+                            }
+                        } else {
+                            Button(
+                                onClick = {
+                                    activityResultSender?.let { sender ->
+                                        viewModel.confirmPurchase(sender) { result, canRetryVerification ->
+                                            result.onSuccess { showPackagesSheet = false }
+                                            result.onFailure { e ->
+                                                scope.launch {
+                                                    if (canRetryVerification) snackbarHostState.showSnackbar("Payment sent but verification delayed. Tap Retry.", withDismissAction = true)
+                                                    else snackbarHostState.showSnackbar(e.message ?: "Purchase failed")
+                                                }
+                                            }
+                                        }
+                                    } ?: scope.launch { snackbarHostState.showSnackbar("Unable to connect wallet") }
+                                },
+                                enabled = canPurchase && payButtonReady,
+                                modifier = Modifier.fillMaxWidth()
+                            ) { Text("Confirm Payment") }
+                        }
+                        Spacer(modifier = Modifier.height(12.dp))
+                        TextButton(
+                            onClick = { viewModel.clearPreparedForPurchase() },
+                            modifier = Modifier.fillMaxWidth()
+                        ) { Text("Choose different plan") }
+                    }
+                }
+            }
+        }
         ModalBottomSheet(
-            onDismissRequest = { showPackagesSheet = false }
+            onDismissRequest = {
+                viewModel.clearPreparedForPurchase()
+                showPackagesSheet = false
+            }
         ) {
             Column(
                 modifier = Modifier
@@ -330,6 +402,14 @@ fun AccountScreen(
                     .padding(24.dp)
             ) {
                 Text("Subscription Plans", style = MaterialTheme.typography.titleLarge)
+                if (packages.isNotEmpty() && !packagesLoading) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        "Tap \"Select\" on a plan. A confirmation dialog will appear, then tap \"Confirm Payment\".",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
                 Spacer(modifier = Modifier.height(16.dp))
                 when {
                     packagesLoading -> {
@@ -348,6 +428,7 @@ fun AccountScreen(
                         )
                     }
                     else -> {
+                        val canPurchase = !recipientAddress.isNullOrBlank() && activityResultSender != null
                         if (recipientAddress.isNullOrBlank()) {
                             Text(
                                 "Payment setup in progress. Plans will be available soon.",
@@ -427,7 +508,7 @@ fun AccountScreen(
                             Spacer(modifier = Modifier.height(8.dp))
                             if (canUpgradeToAnnual) {
                                 val upgradePkg = annualPackage!!
-                                val canPurchase = !recipientAddress.isNullOrBlank() && activityResultSender != null
+                                val isUpgradePrepared = preparedForPurchase?.first?.packageKey == upgradePkg.packageKey
                                 Card(
                                     modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
                                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer)
@@ -447,34 +528,25 @@ fun AccountScreen(
                                                 color = MaterialTheme.colorScheme.onTertiaryContainer
                                             )
                                         }
-                                        Button(
-                                            onClick = {
-                                                if (activityResultSender != null && canPurchase && !purchaseInProgress) {
-                                                    viewModel.purchasePackage(
-                                                        activityResultSender,
-                                                        upgradePkg
-                                                    ) { result, canRetryVerification ->
-                                                        result.onSuccess { showPackagesSheet = false }
-                                                        result.onFailure { e ->
-                                                            scope.launch {
-                                                                if (canRetryVerification) {
-                                                                    snackbarHostState.showSnackbar(
-                                                                        "Payment sent but verification is delayed. Wait a few seconds and tap Retry.",
-                                                                        withDismissAction = true
-                                                                    )
-                                                                } else {
-                                                                    snackbarHostState.showSnackbar(e.message ?: "Purchase failed")
-                                                                }
+                                        if (isUpgradePrepared) {
+                                            Text("Selected", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+                                        } else {
+                                            Button(
+                                                onClick = {
+                                                    if (canPurchase && !purchaseInProgress) {
+                                                        viewModel.prepareForPurchase(upgradePkg) { result ->
+                                                            result.onFailure { e ->
+                                                                scope.launch { snackbarHostState.showSnackbar(e.message ?: "Prepare failed") }
                                                             }
                                                         }
+                                                    } else if (activityResultSender == null) {
+                                                        scope.launch { snackbarHostState.showSnackbar("Unable to connect wallet") }
                                                     }
-                                                } else if (activityResultSender == null) {
-                                                    scope.launch { snackbarHostState.showSnackbar("Unable to connect wallet") }
-                                                }
-                                            },
-                                            enabled = canPurchase && !purchaseInProgress
-                                        ) {
-                                            Text("Upgrade")
+                                                },
+                                                enabled = canPurchase && !purchaseInProgress
+                                            ) {
+                                                Text(if (purchaseInProgress) "Preparing…" else "Upgrade")
+                                            }
                                         }
                                     }
                                 }
@@ -482,46 +554,50 @@ fun AccountScreen(
                             }
                         } else {
                             packages.forEach { pkg ->
-                                val canPurchase = !recipientAddress.isNullOrBlank() && activityResultSender != null
+                                val isPrepared = preparedForPurchase?.first?.packageKey == pkg.packageKey
                                 Card(
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .padding(vertical = 6.dp)
-                                        .clickable(enabled = canPurchase && !purchaseInProgress) {
-                                            if (activityResultSender != null) {
-                                                viewModel.purchasePackage(
-                                                    activityResultSender,
-                                                    pkg
-                                                ) { result, canRetryVerification ->
-                                                    result.onSuccess {
-                                                        showPackagesSheet = false
-                                                    }.onFailure { e ->
-                                                        scope.launch {
-                                                            if (canRetryVerification) {
-                                                                snackbarHostState.showSnackbar(
-                                                                    "Payment sent but verification is delayed. Wait a few seconds and tap Retry.",
-                                                                    withDismissAction = true
-                                                                )
-                                                            } else {
-                                                                snackbarHostState.showSnackbar(e.message ?: "Purchase failed")
-                                                            }
-                                                        }
-                                                    }
-                                                }
-                                            } else {
-                                                scope.launch { snackbarHostState.showSnackbar("Unable to connect wallet") }
-                                            }
-                                        },
+                                        .padding(vertical = 6.dp),
                                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh)
                                 ) {
-                                    Column(modifier = Modifier.padding(16.dp)) {
-                                        Text(pkg.name, style = MaterialTheme.typography.titleMedium)
-                                        pkg.description?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
-                                        Text(
-                                            "${formatSolAmount(pkg.amountSol)} SOL · ${pkg.durationMonths} month${if (pkg.durationMonths > 1) "s" else ""}",
-                                            style = MaterialTheme.typography.labelLarge,
-                                            color = MaterialTheme.colorScheme.primary
-                                        )
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(16.dp),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(pkg.name, style = MaterialTheme.typography.titleMedium)
+                                            pkg.description?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
+                                            Text(
+                                                "${formatSolAmount(pkg.amountSol)} SOL · ${pkg.durationMonths} month${if (pkg.durationMonths > 1) "s" else ""}",
+                                                style = MaterialTheme.typography.labelLarge,
+                                                color = MaterialTheme.colorScheme.primary
+                                            )
+                                        }
+                                        when {
+                                            isPrepared -> Text("Selected", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+                                            preparingPackage?.packageKey == pkg.packageKey ->
+                                                androidx.compose.material3.CircularProgressIndicator(modifier = Modifier.size(24.dp))
+                                            else -> Button(
+                                                onClick = {
+                                                    if (canPurchase && !purchaseInProgress) {
+                                                        viewModel.prepareForPurchase(pkg) { result ->
+                                                            result.onFailure { e ->
+                                                                scope.launch { snackbarHostState.showSnackbar(e.message ?: "Prepare failed") }
+                                                            }
+                                                        }
+                                                    } else if (activityResultSender == null) {
+                                                        scope.launch { snackbarHostState.showSnackbar("Unable to connect wallet") }
+                                                    }
+                                                },
+                                                enabled = canPurchase && !purchaseInProgress
+                                            ) {
+                                                Text(if (purchaseInProgress) "Preparing…" else "Select")
+                                            }
+                                        }
                                     }
                                 }
                             }
@@ -530,7 +606,10 @@ fun AccountScreen(
                 }
                 if (packages.isNotEmpty() && !packagesLoading) {
                     Spacer(modifier = Modifier.height(16.dp))
-                    TextButton(onClick = { showPackagesSheet = false }) {
+                    TextButton(onClick = {
+                        viewModel.clearPreparedForPurchase()
+                        showPackagesSheet = false
+                    }) {
                         Text("Cancel")
                     }
                 }

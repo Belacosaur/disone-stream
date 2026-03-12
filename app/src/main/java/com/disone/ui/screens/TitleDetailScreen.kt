@@ -208,51 +208,53 @@ fun TitleDetailScreen(
 
                     HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
 
-                    Text("Reviews", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(16.dp))
-                    if (authState is AuthState.Authenticated) {
-                        var reviewText by remember { mutableStateOf("") }
-                        var reviewRating by remember { mutableStateOf<Int?>(null) }
-                        OutlinedTextField(
-                            value = reviewText,
-                            onValueChange = { if (it.length <= 560) reviewText = it },
-                            label = { Text("Write a review (max 560 chars)") },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(16.dp),
-                            maxLines = 3
-                        )
-                        Button(
-                            onClick = {
-                                if (reviewText.isNotBlank()) {
-                                    viewModel.submitReview(type, id, reviewText.trim(), reviewRating)
-                                    reviewText = ""
-                                    reviewRating = null
-                                }
-                            },
-                            modifier = Modifier.padding(horizontal = 16.dp)
-                        ) {
-                            Text("Submit Review")
-                        }
-                    }
-                    state.reviews.forEach { review ->
-                        ReviewCard(
-                            review = review,
-                            showActions = authState is AuthState.Authenticated,
-                            onDelete = { viewModel.deleteReview(type, id, review.id) }
-                        )
-                    }
-                    state.reviewsPagination?.let { pag ->
-                        if (pag.page < pag.totalPages) {
+                    // Reviews section hidden for now
+                    if (false) {
+                        Text("Reviews", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(16.dp))
+                        if (authState is AuthState.Authenticated) {
+                            var reviewText by remember { mutableStateOf("") }
+                            var reviewRating by remember { mutableStateOf<Int?>(null) }
+                            OutlinedTextField(
+                                value = reviewText,
+                                onValueChange = { if (it.length <= 560) reviewText = it },
+                                label = { Text("Write a review (max 560 chars)") },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(16.dp),
+                                maxLines = 3
+                            )
                             Button(
-                                onClick = { viewModel.loadMoreReviews(type, id) },
-                                modifier = Modifier.padding(16.dp)
+                                onClick = {
+                                    if (reviewText.isNotBlank()) {
+                                        viewModel.submitReview(type, id, reviewText.trim(), reviewRating)
+                                        reviewText = ""
+                                        reviewRating = null
+                                    }
+                                },
+                                modifier = Modifier.padding(horizontal = 16.dp)
                             ) {
-                                Text("Load more reviews")
+                                Text("Submit Review")
                             }
                         }
+                        state.reviews.forEach { review ->
+                            ReviewCard(
+                                review = review,
+                                showActions = authState is AuthState.Authenticated,
+                                onDelete = { viewModel.deleteReview(type, id, review.id) }
+                            )
+                        }
+                        state.reviewsPagination?.let { pag ->
+                            if (pag.page < pag.totalPages) {
+                                Button(
+                                    onClick = { viewModel.loadMoreReviews(type, id) },
+                                    modifier = Modifier.padding(16.dp)
+                                ) {
+                                    Text("Load more reviews")
+                                }
+                            }
+                        }
+                        HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
                     }
-
-                    HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
 
                     Text("Comments", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(16.dp))
                     if (authState is AuthState.Authenticated) {
@@ -335,13 +337,55 @@ private fun CommentCard(comment: Comment) {
             .padding(horizontal = 16.dp, vertical = 8.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
     ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Text(comment.user.username, style = MaterialTheme.typography.labelMedium)
-            Text(comment.body, style = MaterialTheme.typography.bodyMedium)
-            comment.replies.forEach { reply ->
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(reply.user.username, style = MaterialTheme.typography.labelSmall)
-                Text(reply.body, style = MaterialTheme.typography.bodySmall)
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.Top
+        ) {
+            AsyncImage(
+                model = comment.user.avatarUrl,
+                contentDescription = comment.user.username,
+                modifier = Modifier
+                    .size(40.dp)
+                    .background(MaterialTheme.colorScheme.surface),
+                contentScale = ContentScale.Crop,
+                placeholder = painterResource(R.drawable.defaultavatar),
+                error = painterResource(R.drawable.defaultavatar)
+            )
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    comment.user.username,
+                    style = MaterialTheme.typography.labelMedium
+                )
+                Text(
+                    comment.body,
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.padding(top = 4.dp)
+                )
+                comment.replies.forEach { reply ->
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.Top
+                    ) {
+                        AsyncImage(
+                            model = reply.user.avatarUrl,
+                            contentDescription = reply.user.username,
+                            modifier = Modifier
+                                .size(28.dp)
+                                .background(MaterialTheme.colorScheme.surface),
+                            contentScale = ContentScale.Crop,
+                            placeholder = painterResource(R.drawable.defaultavatar),
+                            error = painterResource(R.drawable.defaultavatar)
+                        )
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(reply.user.username, style = MaterialTheme.typography.labelSmall)
+                            Text(reply.body, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 2.dp))
+                        }
+                    }
+                }
             }
         }
     }

@@ -75,6 +75,8 @@ fun PlayerScreen(
     val packagesLoading by viewModel.packagesLoading.collectAsState()
     val recipientAddress by viewModel.recipientAddress.collectAsState()
     val purchaseInProgress by viewModel.purchaseInProgress.collectAsState()
+    val preparedForPurchase by viewModel.preparedForPurchase.collectAsState()
+    val preparingPackage by viewModel.preparingPackage.collectAsState()
     val pendingVerification by viewModel.pendingVerification.collectAsState()
     val purchaseConfirmation by viewModel.purchaseConfirmation.collectAsState()
     val context = LocalContext.current
@@ -471,16 +473,25 @@ fun PlayerScreen(
     }
 
     if (showPurchaseSheet) {
+        LaunchedEffect(Unit) { viewModel.loadPackages() }
         PurchasePackageSheet(
             packages = packages,
             packagesLoading = packagesLoading,
             recipientAddress = recipientAddress,
             pendingVerification = pendingVerification,
             purchaseInProgress = purchaseInProgress,
-            onLoadPackages = { viewModel.loadPackages() },
-            onPurchase = { pkg ->
+            preparedPackage = preparedForPurchase?.first,
+            preparingPackage = preparingPackage,
+            onPrepare = { pkg ->
+                viewModel.prepareForPurchase(pkg) { result ->
+                    result.onFailure { e ->
+                        scope.launch { snackbarHostState.showSnackbar(e.message ?: "Prepare failed") }
+                    }
+                }
+            },
+            onPay = {
                 activityResultSender?.let { sender ->
-                    viewModel.purchasePackage(sender, pkg) { result, canRetry ->
+                    viewModel.confirmPurchase(sender) { result, canRetry ->
                         result.onSuccess {
                             showPurchaseSheet = false
                             viewModel.dismissPurchaseConfirmation()
@@ -496,6 +507,7 @@ fun PlayerScreen(
                     }
                 } ?: scope.launch { snackbarHostState.showSnackbar("Unable to connect wallet") }
             },
+            onClearPrepared = { viewModel.clearPreparedForPurchase() },
             onRetryVerification = {
                 viewModel.retryPendingVerification { result ->
                     result.onSuccess {

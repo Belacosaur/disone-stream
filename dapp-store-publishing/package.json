@@ -1,0 +1,9 @@
+{
+  "name": "disone-dapp-store-publishing",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Solana dApp Store (Seeker) publishing for Disone",
+  "devDependencies": {
+    "@solana-mobile/dapp-store-cli": "latest"
+  }
+}
